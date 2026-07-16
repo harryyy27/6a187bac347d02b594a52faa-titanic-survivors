@@ -1,0 +1,25 @@
+# Minimal test image for the Titanic Survival Prediction eval bundle.
+#
+# Exercises run_eval.py's own orchestration logic (synthetic-dataset
+# generation, fold-error computation, result-record assembly) via
+# tests/conftest.py's lightweight stand-in `titanic` module -- the real
+# titanic_survival_predictor component and xgboost are never installed or
+# imported here, mirroring the sibling component's own fake-engine test
+# strategy (see titanic_survival_predictor/tests/conftest.py).
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Validate the test dependency manifest before installing anything from it.
+COPY requirements-test.txt ./requirements-test.txt
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && pip install --dry-run --no-cache-dir -r requirements-test.txt \
+    && pip install --no-cache-dir -r requirements-test.txt
+
+# Copy only the eval script and its tests -- never the whole build context.
+COPY run_eval.py ./run_eval.py
+COPY tests/ ./tests/
+
+ENV PYTHONUNBUFFERED=1
+
+CMD ["pytest", "tests/", "-v"]

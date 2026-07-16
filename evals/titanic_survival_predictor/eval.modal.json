@@ -1,0 +1,12 @@
+{
+  "backend": "modal_container",
+  "version": 1,
+  "python_version": "3.11",
+  "working_dir": ".",
+  "command": ["python", "evals/titanic_survival_predictor/run_eval.py"],
+  "requirements_files": ["evals/titanic_survival_predictor/requirements.txt"],
+  "result_files": ["evals/titanic_survival_predictor/eval_results.json"],
+  "timeout_seconds": 1800,
+  "gpu_tier": "none",
+  "env": {}
+}
