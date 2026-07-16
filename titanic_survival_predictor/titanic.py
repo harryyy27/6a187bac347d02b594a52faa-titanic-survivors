@@ -1,259 +1,243 @@
-import pandas as pd
-import numpy as np
-import scipy as sp 
-import matplotlib.pyplot as plt
-import seaborn as sns
-import math
+"""Titanic survival predictor pipeline.
+
+Refactored from the original exploratory script into importable, testable
+functions. Pure data-wrangling/feature-engineering functions have no
+dependency on heavy ML engines and can be unit tested in isolation. The
+training/inference functions depend on xgboost and keras but only at the
+point they are called (not at import time), so the module can be imported
+safely without those engines running.
+
+Running this file directly (``python titanic.py``) executes the full
+production pipeline: load -> clean -> engineer features -> scale -> encode
+-> train an ensemble -> predict -> write results.csv.
+"""
+from __future__ import annotations
+
 import pickle
-from sklearn import ensemble, discriminant_analysis, gaussian_process
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.svm import SVC
-from sklearn.metrics import accuracy_score
-from sklearn.preprocessing import LabelEncoder
-import xgboost as xgb
-from keras import layers, models
-from keras.utils.np_utils import to_categorical
-from keras.callbacks import ReduceLROnPlateau
-#pull data from csv
-train= pd.read_csv('./titanic/train.csv',delimiter=',')
-test = pd.read_csv('./titanic/test.csv', delimiter=',')
-##view data
-print(train.head())
-print(train.sample(10))
-print(train.info())
-print(train.describe())
+from collections import Counter
 
-correlation_matrix = train.corr()
-print(train.corr())
-f, ax = plt.subplots(figsize=(12,9))
-sns.heatmap(correlation_matrix,vmax=1,vmin=-1,square=True)
-plt.show()
-##4Cs of data cleaning - correcting, completing, creating, converting
-#null values
-print(train.isnull().sum())
-##fill null values
-train['Age'].fillna(train['Age'].median(),inplace=True)
-test['Age'].fillna(train['Age'].median(),inplace=True)
-train['Embarked'].fillna(train['Embarked'].mode()[0],inplace=True)
-test['Embarked'].fillna(train['Embarked'].mode()[0],inplace=True)
+import numpy as np
+import pandas as pd
 
-train.drop(columns=['PassengerId','Cabin','Ticket'],inplace = True)
-test.drop(columns=['Cabin','Ticket'],inplace = True)
-print(train.head())
-print(test.head())
-train['Family_Size']=train['SibSp']+train['Parch']
-test['Family_Size']=test['SibSp']+test['Parch']
 
-train['Loner']=1
-test['Loner']=1
-train['Loner'].loc[train['Family_Size']>0]=0
-test['Loner'].loc[test['Family_Size']>0]=0
-train['Title']= train['Name'].str.split(', ', expand=True)[1].str.split(".", expand=True)[0]
-test['Title']= test['Name'].str.split(', ', expand=True)[1].str.split(".", expand=True)[0]
+DATA_DIR = "./titanic"
+RARE_TITLE_THRESHOLD = 8
 
-train.drop(columns=['Name'],inplace=True)
-test.drop(columns=['Name'],inplace=True)
 
-print(train.head())
-train_title_count=train['Title'].value_counts()<8
-test_title_count=test['Title'].value_counts()<8
-train['Title']=train['Title'].apply(lambda x: 'Other' if train_title_count.loc[x]==True else x)
-test['Title']=test['Title'].apply(lambda x: 'Other' if test_title_count.loc[x]==True else x)
+def load_data(data_dir: str = DATA_DIR):
+    """Load the raw train/test passenger data from CSV."""
+    train = pd.read_csv(f"{data_dir}/train.csv", delimiter=",")
+    test = pd.read_csv(f"{data_dir}/test.csv", delimiter=",")
+    return train, test
 
-#other includes all titles bar main 4
-print(train['Title'].value_counts())
 
-print(train['Fare'])
-sns.distplot(train['Fare'],fit=sp.stats.norm)
-fig = plt.figure()
-res = sp.stats.probplot(train['Fare'],plot=plt)
-plt.show()
+def fill_missing_values(train, test):
+    """Impute Age (median) and Embarked (mode) null values."""
+    train = train.copy()
+    test = test.copy()
+    age_median = train["Age"].median()
+    embarked_mode = train["Embarked"].mode()[0]
+    train["Age"] = train["Age"].fillna(age_median)
+    test["Age"] = test["Age"].fillna(age_median)
+    train["Embarked"] = train["Embarked"].fillna(embarked_mode)
+    test["Embarked"] = test["Embarked"].fillna(embarked_mode)
+    return train, test
 
-zeros = train.loc[train['Fare']==0]
-test_zeros = test.loc[test['Fare']==0]
-print(zeros)
-## NO ZERO VALUES IN TEST FOR FARE
-print(test_zeros)
-filter_columns = train[['Pclass','Fare']]
-filter_free_tickets = filter_columns[filter_columns['Fare']>0]
-class_groups = filter_free_tickets.groupby('Pclass')
 
-for name,group in class_groups:
-    sns.distplot(group['Fare'])
-    plt.show()
+def drop_unused_columns(train, test):
+    """Drop identifier / high-missingness columns that carry no signal."""
+    train = train.drop(columns=["PassengerId", "Cabin", "Ticket"])
+    test = test.drop(columns=["Cabin", "Ticket"])
+    return train, test
 
-class_groups_median= class_groups.median()
-print(class_groups_median)
-def col_change(x,y):
-    if x==0:
-        return class_groups_median.iloc[y-1]['Fare']
-    else:
+
+def add_family_features(df):
+    """Add Family_Size (SibSp + Parch) and Loner (no family aboard) columns."""
+    df = df.copy()
+    df["Family_Size"] = df["SibSp"] + df["Parch"]
+    df["Loner"] = 1
+    df.loc[df["Family_Size"] > 0, "Loner"] = 0
+    return df
+
+
+def extract_title(df):
+    """Derive a Title column from the passenger Name and drop Name."""
+    df = df.copy()
+    df["Title"] = df["Name"].str.split(", ", expand=True)[1].str.split(".", expand=True)[0]
+    df = df.drop(columns=["Name"])
+    return df
+
+
+def consolidate_rare_titles(df, threshold: int = RARE_TITLE_THRESHOLD):
+    """Collapse titles occurring fewer than ``threshold`` times into 'Other'."""
+    df = df.copy()
+    title_counts = df["Title"].value_counts()
+    rare = title_counts < threshold
+    df["Title"] = df["Title"].apply(lambda x: "Other" if rare.loc[x] else x)
+    return df
+
+
+def fix_zero_fares(train, test):
+    """Replace zero-value fares with the per-class median fare."""
+    train = train.copy()
+    test = test.copy()
+    filter_columns = train[["Pclass", "Fare"]]
+    filter_free_tickets = filter_columns[filter_columns["Fare"] > 0]
+    class_groups = filter_free_tickets.groupby("Pclass")
+    class_groups_median = class_groups.median()
+
+    def col_change(x, y):
+        if x == 0:
+            return class_groups_median.iloc[int(y) - 1]["Fare"]
         return x
-train['Fare']=train.apply(lambda x: col_change(x['Fare'],x['Pclass']), axis=1)
-test['Fare']=test.apply(lambda x: col_change(x['Fare'],x['Pclass']),axis=1)
-#     test['Fare']=test['Fare'].apply(lambda x: class_groups_median.iloc[i+1,0] if x==0 else x)
-new_zeros = train.loc[train['Fare']==0]
-new_test_zeros=test.loc[test['Fare']==0]
-print(new_zeros)
-print(new_test_zeros)
-print(train['Fare'])
-fare_mean = train['Fare'].mean()
-fare_std = train['Fare'].std()
-test['Fare']=test['Fare'].apply(lambda x: np.log(x))
-test['Fare']-=fare_mean
-test['Fare']/=fare_std
-train['Fare']=train['Fare'].apply(lambda x: np.log(x))
-train['Fare']-=fare_mean
-train['Fare']/=fare_std
-print(class_groups_median)
-sns.distplot(train['Fare'].to_numpy(),fit=sp.stats.norm)
-fig = plt.figure()
-res = sp.stats.probplot(train['Fare'],plot=plt)
-plt.show()
 
-sns.distplot(train['Age'],fit=sp.stats.norm)
-fig = plt.figure()
-res = sp.stats.probplot(train['Age'],plot=plt)
-plt.show()
+    train["Fare"] = train.apply(lambda row: col_change(row["Fare"], row["Pclass"]), axis=1)
+    test["Fare"] = test.apply(lambda row: col_change(row["Fare"], row["Pclass"]), axis=1)
+    return train, test
 
-age_mean = train['Age'].mean()
-age_std = train['Age'].std()
-train['Age']-=age_mean
-train['Age']/=age_std
-test['Age']-=age_mean
-test['Age']/=age_std
-sns.distplot(train['Age'],fit=sp.stats.norm)
-fig = plt.figure()
-res = sp.stats.probplot(train['Age'],plot=plt)
-plt.show()
 
-train=pd.get_dummies(train)
-train=pd.get_dummies(train, columns=['Pclass'])
-test=pd.get_dummies(test)
-test=pd.get_dummies(test,columns=['Pclass'])
-print(train.head())
+def scale_fare(train, test):
+    """Log-transform and standardize the Fare column using train statistics."""
+    train = train.copy()
+    test = test.copy()
+    train["Fare"] = train["Fare"].apply(lambda x: np.log(x))
+    fare_mean = train["Fare"].mean()
+    fare_std = train["Fare"].std()
+    test["Fare"] = test["Fare"].apply(lambda x: np.log(x))
+    test["Fare"] -= fare_mean
+    test["Fare"] /= fare_std
+    train["Fare"] -= fare_mean
+    train["Fare"] /= fare_std
+    return train, test
 
-train_y = train['Survived']
-# le = LabelEncoder()
-# train_y = to_categorical(train_y)
-train.drop(['Survived'],axis=1, inplace=True)
-train=train.to_numpy()
 
-def build_model():
-    model= models.Sequential()
-    model.add(layers.Dense(32,activation='relu',input_shape=(train.shape[1],)))
-#     model.add(layers.Dense(16, activation='relu'))
-    model.add(layers.Dense(2, activation='softmax'))
-    model.compile(optimizer='adam', loss='binary_crossentropy',metrics=['accuracy'])
+def scale_age(train, test):
+    """Standardize the Age column using train statistics."""
+    train = train.copy()
+    test = test.copy()
+    age_mean = train["Age"].mean()
+    age_std = train["Age"].std()
+    train["Age"] -= age_mean
+    train["Age"] /= age_std
+    test["Age"] -= age_mean
+    test["Age"] /= age_std
+    return train, test
+
+
+def encode_categoricals(train, test):
+    """One-hot encode categorical columns, including Pclass."""
+    train = pd.get_dummies(train)
+    train = pd.get_dummies(train, columns=["Pclass"])
+    test = pd.get_dummies(test)
+    test = pd.get_dummies(test, columns=["Pclass"])
+    return train, test
+
+
+def prepare_features(train, test):
+    """Run the full cleaning / feature-engineering chain on raw data."""
+    train, test = fill_missing_values(train, test)
+    train, test = drop_unused_columns(train, test)
+    train = add_family_features(train)
+    test = add_family_features(test)
+    train = extract_title(train)
+    test = extract_title(test)
+    train = consolidate_rare_titles(train)
+    test = consolidate_rare_titles(test)
+    train, test = fix_zero_fares(train, test)
+    train, test = scale_fare(train, test)
+    train, test = scale_age(train, test)
+    train, test = encode_categoricals(train, test)
+    return train, test
+
+
+def build_keras_model(input_dim: int):
+    """Build the small feed-forward Keras classifier used in the ensemble."""
+    from keras import layers, models
+
+    model = models.Sequential()
+    model.add(layers.Dense(32, activation="relu", input_shape=(input_dim,)))
+    model.add(layers.Dense(2, activation="softmax"))
+    model.compile(optimizer="adam", loss="binary_crossentropy", metrics=["accuracy"])
     return model
-k=4
-num_samples = len(train)//k
-num_epochs = 18
-ensemble = []
-val_data = train[0:200]
-val_targets = train_y[0:200]
-train_data = train[200:len(train)]
-train_targets = train_y[200:len(train_y)]
-for i in range(k):
-    print('processing model #',i)
-    val_data = train[i* num_samples: (i+1)* num_samples]
-    val_targets = train_y[i* num_samples: (i+1)* num_samples]
 
-    partial_train_data = np.concatenate(
-        [train[:i*num_samples],
-        train[(i+1)* num_samples:]],axis=0
+
+def xgb_params():
+    """Hyperparameters for the XGBoost ensemble members."""
+    return {
+        "max_depth": 4,
+        "objective": "binary:logistic",
+        "eta": 0.125,
+        "min_child_weight": 1,
+        "gamma": 1,
+        "alpha": 0.4,
+        "eval_metric": "error",
+        "colsample_bytree": 0.8,
+    }
+
+
+def train_xgb_ensemble(train_x, train_y, k: int = 4, num_round: int = 25, model_dir: str = "."):
+    """Train a k-fold XGBoost ensemble and persist each fold's model to disk."""
+    import xgboost as xgb
+
+    num_samples = len(train_x) // k
+    ensemble = []
+    for i in range(k):
+        val_data = train_x[i * num_samples: (i + 1) * num_samples]
+        val_targets = train_y[i * num_samples: (i + 1) * num_samples]
+        partial_train_data = np.concatenate(
+            [train_x[: i * num_samples], train_x[(i + 1) * num_samples:]], axis=0
+        )
+        partial_train_targets = np.concatenate(
+            [train_y[: i * num_samples], train_y[(i + 1) * num_samples:]], axis=0
+        )
+        dtrain = xgb.DMatrix(partial_train_data, partial_train_targets)
+        dval = xgb.DMatrix(val_data, val_targets)
+        eval_list = [(dval, "eval"), (dtrain, "train")]
+        bst = xgb.train(xgb_params(), dtrain, num_round, eval_list, early_stopping_rounds=20)
+        model_path = f"{model_dir}/xgb{i}.pickle.dat"
+        pickle.dump(bst, open(model_path, "wb"))
+        loaded_model = pickle.load(open(model_path, "rb"))
+        ensemble.append(loaded_model)
+    return ensemble
+
+
+def predict_with_ensemble(ensemble, test_x):
+    """Majority-vote predictions across all ensemble members for each row."""
+    import xgboost as xgb
+
+    final_predictions = []
+    for i in range(len(test_x)):
+        votes = []
+        for model in ensemble:
+            dtest = xgb.DMatrix([test_x[i]])
+            prediction = model.predict(dtest)[0]
+            votes.append(0 if prediction <= 0.5 else 1)
+        most_common_vote, _ = Counter(votes).most_common(1)[0]
+        final_predictions.append(most_common_vote)
+    return final_predictions
+
+
+def run_pipeline(data_dir: str = DATA_DIR, output_path: str = "results.csv", model_dir: str = "."):
+    """Execute the full production pipeline end-to-end."""
+    train, test = load_data(data_dir)
+    train, test = prepare_features(train, test)
+
+    train_y = train["Survived"]
+    train = train.drop(["Survived"], axis=1).to_numpy()
+
+    ensemble = train_xgb_ensemble(train, train_y, model_dir=model_dir)
+
+    passenger_id = test["PassengerId"]
+    test = test.drop(["PassengerId"], axis=1).to_numpy()
+
+    predictions = predict_with_ensemble(ensemble, test)
+    submission = pd.DataFrame(
+        data=np.array(list(zip(passenger_id, predictions))),
+        columns=["PassengerId", "Survived"],
     )
-    partial_train_targets = np.concatenate(
-        [train_y[:i*num_samples],
-        train_y[(i+1)* num_samples:]],
-        axis=0
-    )
-    dtrain = xgb.DMatrix(partial_train_data,partial_train_targets)
-    dval = xgb.DMatrix(val_data,val_targets)
-#     dtrain = xgb.DMatrix(train_data,train_targets)
-#     dval = xgb.DMatrix(val_data,val_targets)
-    eval_list = [(dval,'eval'),(dtrain,'train')]
-    num_round = 25
-    params = {
-             'max_depth': 4, #maximum number of levels in decision tree
-             'objective': 'binary:logistic', #determines loss function used
-             'eta':0.125, #learning rate
-             'min_child_weight':1, #minimum similarity score for each leaf. if similarity score of leaf<min_child_weight then this leaf will not be included,
-             'gamma':1, #added to denominator of loss function to decrease similirity score of leaves to prevent overfitting',
-             'delta': 0.75, #L2 regularization term - Ridge regression. Penalizes high slope values as sensitivity to error increases with slope. good when 
-             'alpha': 0.4, #L1 regularization term - Lasso regression. Shrinks less important feature coefficients to zero so useful when unnecessarily large number of features
-             'eval_metric': 'error',
-             'colsample_bytree': 0.8,
-            
+    submission.to_csv(output_path, index=False, header=["PassengerId", "Survived"])
+    return submission
 
-            }
-    bst = xgb.train(params,dtrain,num_round,eval_list,early_stopping_rounds=20)
-    pickle.dump(bst,open('xgb'+ str(i) + '.pickle.dat','wb'))
-    loaded_model = pickle.load(open("xgb"+str(i)+".pickle.dat", "rb"))
-    accuracy = loaded_model.predict(dval,ntree_limit=bst.best_ntree_limit)
-    classifications = [0 if x<=0.5 else 1 for x in accuracy ]
 
-    correct = [True if x==y else False for (x,y) in zip(classifications,val_targets)]
-    fraction = correct.count(True)/len(correct)
-    print(classifications)
-    print(val_targets)
-    print(fraction)
-    ensemble.append(loaded_model)
-
-ensemble = np.array(ensemble)
-# indices = np.random.choice(range(0,891),200,replace=False)
-# val_dat = []
-# val_labels= []
-# for i in indices:
-#     val_dat.append(train[i])
-#     val_labels.append(train_y[i])
-passenger_id = test['PassengerId']
-test.drop(['PassengerId'],axis=1,inplace=True)
-
-test = test.to_numpy()
-print(test[0:5])
-final_predictions = []
-# for i in range(len(val_dat)):
-#     predictions = []
-#     for model in ensemble:
-#         dval = xgb.DMatrix([val_dat[i]],[val_labels[i]])
-#         predict = model.predict(dval)
-#         print(predict)
-#         prediction = predict[0]
-#         if prediction <=0.5:
-#             predictions.append(0)
-# #         int_prediction = predict[0].tolist().index(prediction)
-#         else:
-#             predictions.append(1)
-#     most_votes = sp.stats.mode(predictions)
-#     print(val_labels[i])
-#     print(most_votes)
-    
-#     print(val_labels[i]==most_votes[0][0])
-#     if val_labels[i]==most_votes[0][0]:
-#         final_predictions.append(True)
-#     else:
-#         final_predictions.append(False)
-for i in range(len(test)):
-    predictions = []
-    for model in ensemble:
-        dtest = xgb.DMatrix([test[i]])
-        predict = model.predict(dtest)
-        prediction = predict[0]
-        if prediction <=0.5:
-            predictions.append(0)
-#         int_prediction = predict[0].tolist().index(prediction)
-        else:
-            predictions.append(1)
-    most_votes = sp.stats.mode(predictions)
-    final_predictions.append([passenger_id[i],most_votes[0][0]])
-# val_acc = final_predictions.count(True) / len(final_predictions)
-# val_loss = final_predictions.count(False) / len(final_predictions)
-# print(val_acc)
-# print(val_loss)
-# print(test)
-# print(train)
-print(len(final_predictions))
-submission = pd.DataFrame(data=np.array(final_predictions), columns=['PassengerId','Survived'])
-print(submission.head())
+if __name__ == "__main__":
+    run_pipeline()

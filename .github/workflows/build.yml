@@ -1,0 +1,79 @@
+name: Build & Push Docker Images Per Subfolder
+
+on:
+  workflow_dispatch:
+    inputs:
+      registry_path:
+        description: "Full registry path, e.g., ghcr.io/harryyy27"
+        required: true
+      env_name:
+        description: "Environment name (dev, test, prod)"
+        required: true
+      project_id:
+        description: "Project ID"
+        required: true
+      user_id:
+        description: "User ID"
+        required: true
+      build_tag:
+        description: "Optional build tag (default: timestamp+SHA)"
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-subfolders:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & Push Docker Images
+        run: |
+          for dir in */ ; do
+            dir=${dir%/}
+            ENV_NAME="${{ github.event.inputs.env_name }}"
+            DOCKERFILE=""
+            if [ "$ENV_NAME" = "prod" ]; then
+              if [ -f "$dir/Dockerfile.prod" ]; then
+                DOCKERFILE="$dir/Dockerfile.prod"
+              elif [ -f "$dir/Dockerfile" ]; then
+                DOCKERFILE="$dir/Dockerfile"
+              fi
+            else
+              if [ -f "$dir/Dockerfile.$ENV_NAME" ]; then
+                DOCKERFILE="$dir/Dockerfile.$ENV_NAME"
+              fi
+            fi
+
+            if [ -z "$DOCKERFILE" ]; then
+              echo "Skipping $dir: No suitable Dockerfile found for environment $ENV_NAME"
+              continue
+            fi
+
+            DIR_CLEAN=$(echo "$dir" | tr '[:upper:]' '[:lower:]' | sed -e 's/[_ ]/-/g' -e 's/[^a-z0-9-]/-/g' -e 's/-\{1,\}/-/g' -e 's/^-//' -e 's/-$//')
+            IMAGE_NAME="${{ github.event.inputs.registry_path }}/appbuilder-u${{ github.event.inputs.user_id }}-p${{ github.event.inputs.project_id }}-${DIR_CLEAN}-${{ github.event.inputs.env_name }}"
+            CACHE_REF="$IMAGE_NAME:buildcache"
+            echo "Building $dir -> $IMAGE_NAME"
+            docker buildx build \
+              --file "$DOCKERFILE" \
+              --tag "$IMAGE_NAME:${{ github.event.inputs.build_tag }}" \
+              --tag "$IMAGE_NAME:latest" \
+              --push \
+              --output=type=image,oci-mediatypes=true \
+              --cache-from=type=registry,ref="$CACHE_REF" \
+              --cache-to=type=registry,ref="$CACHE_REF",mode=max \
+              "$dir"
+          done

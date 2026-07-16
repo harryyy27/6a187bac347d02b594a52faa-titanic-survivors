@@ -1,0 +1,103 @@
+# DEPRECATED: This GitHub Actions deploy workflow is deprecated.
+# Production deployments are now managed directly by the platform's deployment service.
+# This file remains only for manual export / custom CLI reference.
+
+name: Deploy App
+
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "Cloud provider (amazon or google)"
+        required: true
+        default: "amazon"
+      project_id:
+        description: "Project ID"
+        required: true
+      user_id:
+        description: "User ID"
+        required: true
+      project_name:
+        description: "Project Name"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Merge test into main
+        run: |
+          git fetch origin test
+          git merge origin/test --no-ff -m "Auto-merge test into main"
+          git push origin main
+
+  deploy:
+    needs: merge
+    runs-on: ubuntu-latest
+
+    env:
+      PROVIDER: ${{ github.event.inputs.provider }}
+      PROJECT_ID: ${{ github.event.inputs.project_id }}
+      USER_ID: ${{ github.event.inputs.user_id }}
+      PROJECT_NAME: ${{ github.event.inputs.project_name }}
+
+    steps:
+      - name: Checkout updated main branch
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Create safe app name
+        id: app_name
+        run: |
+          SAFE_NAME=$(echo "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g' | sed 's/-\+/-/g' | sed 's/^-//' | sed 's/-$//')
+          APP_NAME="${PROJECT_ID}-${USER_ID}-${SAFE_NAME}"
+          echo "app_name=$APP_NAME" >> $GITHUB_OUTPUT
+
+      - name: Configure AWS credentials
+        if: env.PROVIDER == 'amazon'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy to AWS
+        if: env.PROVIDER == 'amazon'
+        run: echo "Deploying to AWS... App: ${{ steps.app_name.outputs.app_name }}"
+
+      - name: Authenticate to GCP
+        if: env.PROVIDER == 'google'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Setup gcloud
+        if: env.PROVIDER == 'google'
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Deploy to GCP
+        if: env.PROVIDER == 'google'
+        run: echo "Deploying to GCP... App: ${{ steps.app_name.outputs.app_name }}"
+
+      - name: Validate provider
+        if: env.PROVIDER != 'amazon' && env.PROVIDER != 'google'
+        run: |
+          echo "Invalid provider: $PROVIDER"
+          exit 1

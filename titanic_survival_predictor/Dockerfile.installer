@@ -1,0 +1,20 @@
+# Installer image for titanic_survival_predictor.
+#
+# Generates/updates the pinned requirements.txt lockfile from
+# requirements.in non-interactively, using pip-tools. No application code,
+# data, or model artefacts are copied -- only the manifest.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir pip-tools==7.4.1
+
+# Only the unpinned manifest is needed to (re)generate the lockfile.
+COPY requirements.in ./requirements.in
+
+# Validate the manifest is well-formed, then compile the pinned lockfile.
+RUN pip-compile --dry-run requirements.in \
+    && pip-compile --generate-hashes --output-file=requirements.txt requirements.in
+
+CMD ["cat", "requirements.txt"]

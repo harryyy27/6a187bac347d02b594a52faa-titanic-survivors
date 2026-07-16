@@ -1,0 +1,27 @@
+# Dev/preview image for titanic_survival_predictor.
+#
+# Source is mounted dynamically via PVC at /app at runtime, so no source
+# code is copied here. Dependencies are baked into /deps/venv (outside the
+# mount path) so they survive the mount. Runs JupyterLab bound to 0.0.0.0
+# so the notebook/script can be previewed and edited live against the
+# mounted source, which is the natural "hot-reload" preview surface for
+# this notebook-first data-science component.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Validate the dependency manifest before installing anything from it.
+COPY requirements-dev.txt /tmp/requirements-dev.txt
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && python -m venv /deps/venv \
+    && /deps/venv/bin/pip install --dry-run --no-cache-dir -r /tmp/requirements-dev.txt \
+    && /deps/venv/bin/pip install --no-cache-dir -r /tmp/requirements-dev.txt \
+    && rm /tmp/requirements-dev.txt
+
+ENV PATH="/deps/venv/bin:${PATH}" \
+    PYTHONUNBUFFERED=1
+
+EXPOSE 8888
+
+# No source copied: /app is populated by the runtime PVC mount.
+CMD ["/deps/venv/bin/jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--notebook-dir=/app"]

@@ -1,0 +1,25 @@
+# Minimal test image for titanic_survival_predictor.
+#
+# Runs the cleaned pytest suite only (see TEST_DEPENDENCY_AUDIT.md). The
+# suite exercises project-owned feature-engineering/data-flow logic with
+# real pandas/numpy, and dispatch logic against xgboost/keras via fixtures
+# in tests/conftest.py that install fake modules into sys.modules -- the
+# real xgboost/keras/tensorflow engines are never installed or imported
+# here.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Validate the test dependency manifest before installing anything from it.
+COPY requirements-test.txt ./requirements-test.txt
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && pip install --dry-run --no-cache-dir -r requirements-test.txt \
+    && pip install --no-cache-dir -r requirements-test.txt
+
+# Copy only source and test files -- never the whole build context.
+COPY titanic.py ./titanic.py
+COPY tests/ ./tests/
+
+ENV PYTHONUNBUFFERED=1
+
+CMD ["pytest", "tests/", "-v"]
