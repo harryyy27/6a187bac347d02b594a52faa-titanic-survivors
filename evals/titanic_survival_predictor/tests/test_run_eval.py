@@ -121,6 +121,36 @@ def test_run_produces_well_formed_result_record(monkeypatch, tmp_path, fake_tita
     json.dumps(result)
 
 
+def test_run_forwards_xgb_hyperparameter_overrides_to_training(
+    monkeypatch, tmp_path, fake_titanic_dispatch
+):
+    """Experiment runs tune xgb hyperparameters via EVAL_PARAMETERS_JSON; this
+    must reach titanic.train_xgb_ensemble and be reflected in the recorded
+    result hyperparameters -- not just be accepted and silently dropped."""
+    monkeypatch.setattr(run_eval, "ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setattr(run_eval, "RESULTS_JSON_PATH", str(tmp_path / "eval_results.json"))
+
+    result = run_eval.run(
+        {
+            "train_per_combo": 2,
+            "holdout_per_combo": 1,
+            "k": 2,
+            "num_round": 3,
+            "max_depth": 6,
+            "eta": 0.05,
+        }
+    )
+
+    assert result["hyperparameters"]["max_depth"] == 6
+    assert result["hyperparameters"]["eta"] == 0.05
+    # Untouched hyperparameters keep their production default.
+    assert result["hyperparameters"]["colsample_bytree"] == 0.8
+    assert result["configuration"]["xgb_param_overrides"] == {"max_depth": 6, "eta": 0.05}
+
+    call = fake_titanic_dispatch["train_xgb_ensemble"][0]
+    assert call["xgb_param_overrides"] == {"max_depth": 6, "eta": 0.05}
+
+
 def test_main_emits_training_results_line(monkeypatch, tmp_path, fake_titanic_dispatch, capsys):
     monkeypatch.setattr(run_eval, "ARTIFACT_DIR", str(tmp_path / "artifacts"))
     results_path = tmp_path / "eval_results.json"
