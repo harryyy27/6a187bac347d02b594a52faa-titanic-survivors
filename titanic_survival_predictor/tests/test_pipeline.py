@@ -169,6 +169,24 @@ def test_xgb_params_returns_expected_hyperparameter_keys():
     assert params["max_depth"] == 4
 
 
+def test_xgb_params_merges_overrides_on_top_of_defaults():
+    params = titanic.xgb_params({"eta": 0.05, "max_depth": 6})
+
+    # Overridden keys take the new value...
+    assert params["eta"] == 0.05
+    assert params["max_depth"] == 6
+    # ...while every other default is left untouched.
+    assert params["objective"] == "binary:logistic"
+    assert params["gamma"] == 1
+    assert params["alpha"] == 0.4
+    assert params["colsample_bytree"] == 0.8
+
+
+def test_xgb_params_with_no_overrides_matches_bare_call():
+    assert titanic.xgb_params(None) == titanic.xgb_params()
+    assert titanic.xgb_params({}) == titanic.xgb_params()
+
+
 # ---------------------------------------------------------------------------
 # Dispatch tests: project code driving stubbed heavy engines
 # ---------------------------------------------------------------------------
@@ -190,6 +208,45 @@ def test_train_xgb_ensemble_trains_k_folds_without_real_xgboost(fake_xgboost, tm
     # Each fold's model artifact must be handed off to disk and reloaded.
     for i in range(4):
         assert (tmp_path / f"xgb{i}.pickle.dat").exists()
+
+
+def test_train_xgb_ensemble_forwards_param_overrides_and_early_stopping(fake_xgboost, tmp_path):
+    """Hyperparameter-tuning callers (e.g. the eval harness) must be able to
+    override booster params and the early-stopping patience, and have both
+    actually reach xgboost.train -- not just be recorded for display."""
+    train_x = np.arange(40).reshape(20, 2).astype(float)
+    train_y = np.array([0, 1] * 10)
+
+    titanic.train_xgb_ensemble(
+        train_x,
+        train_y,
+        k=2,
+        num_round=5,
+        model_dir=str(tmp_path),
+        early_stopping_rounds=7,
+        param_overrides={"eta": 0.05, "max_depth": 6},
+    )
+
+    assert len(fake_xgboost._calls["train"]) == 2
+    for call in fake_xgboost._calls["train"]:
+        assert call["early_stopping_rounds"] == 7
+        assert call["params"]["eta"] == 0.05
+        assert call["params"]["max_depth"] == 6
+        # Unrelated defaults must survive the override merge.
+        assert call["params"]["objective"] == "binary:logistic"
+
+
+def test_train_xgb_ensemble_defaults_match_prior_hardcoded_behavior(fake_xgboost, tmp_path):
+    """No param_overrides/early_stopping_rounds given -> identical behavior to
+    the pipeline's original hardcoded call (run_pipeline compatibility)."""
+    train_x = np.arange(40).reshape(20, 2).astype(float)
+    train_y = np.array([0, 1] * 10)
+
+    titanic.train_xgb_ensemble(train_x, train_y, k=4, num_round=3, model_dir=str(tmp_path))
+
+    for call in fake_xgboost._calls["train"]:
+        assert call["early_stopping_rounds"] == 20
+        assert call["params"] == titanic.xgb_params()
 
 
 def test_predict_with_ensemble_majority_votes_across_models(fake_xgboost):

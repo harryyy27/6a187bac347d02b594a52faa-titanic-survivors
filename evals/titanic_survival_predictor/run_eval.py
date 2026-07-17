@@ -47,6 +47,22 @@ DEFAULT_HOLDOUT_PER_COMBO = 3
 DEFAULT_K = 4
 DEFAULT_NUM_ROUND = 25
 
+# Recognized XGBoost booster/tree hyperparameter keys that ``EVAL_PARAMETERS_JSON``
+# is allowed to override on top of ``titanic.xgb_params()`` defaults. Keeping
+# this as an explicit allowlist (rather than passing the whole params dict
+# through) prevents unrelated eval-only keys (seed, k, num_round, ...) from
+# leaking into the XGBoost booster config.
+TUNABLE_XGB_PARAM_KEYS = {
+    "max_depth",
+    "eta",
+    "min_child_weight",
+    "gamma",
+    "alpha",
+    "colsample_bytree",
+    "subsample",
+    "lambda",
+}
+
 RESULTS_JSON_PATH = os.path.join(_THIS_DIR, "eval_results.json")
 ARTIFACT_DIR = os.path.join(_THIS_DIR, "artifacts")
 
@@ -193,6 +209,9 @@ def run(params: dict) -> dict:
     k = int(params.get("k", DEFAULT_K))
     num_round = int(params.get("num_round", DEFAULT_NUM_ROUND))
     early_stopping_rounds = int(params.get("early_stopping_rounds", 20))
+    param_overrides = {
+        key: value for key, value in params.items() if key in TUNABLE_XGB_PARAM_KEYS
+    }
 
     os.makedirs(ARTIFACT_DIR, exist_ok=True)
 
@@ -208,7 +227,13 @@ def run(params: dict) -> dict:
     train_x = train_proc.drop(["Survived"], axis=1).to_numpy()
 
     ensemble = titanic.train_xgb_ensemble(
-        train_x, train_y, k=k, num_round=num_round, model_dir=ARTIFACT_DIR
+        train_x,
+        train_y,
+        k=k,
+        num_round=num_round,
+        model_dir=ARTIFACT_DIR,
+        early_stopping_rounds=early_stopping_rounds,
+        param_overrides=param_overrides or None,
     )
 
     passenger_id = holdout_proc["PassengerId"]
@@ -227,7 +252,7 @@ def run(params: dict) -> dict:
 
     duration = time.time() - start
 
-    model_hyperparameters = dict(titanic.xgb_params())
+    model_hyperparameters = dict(titanic.xgb_params(param_overrides))
     model_hyperparameters.update(
         {
             "k": k,
@@ -271,6 +296,7 @@ def run(params: dict) -> dict:
             "split": "stratified_by_pclass_sex_title_embarked",
             "run_type": "baseline",
             "eval_kind": "model_training",
+            "hyperparameter_overrides": param_overrides,
         },
         "additional_metadata": {
             "fold_errors": fold_errors,

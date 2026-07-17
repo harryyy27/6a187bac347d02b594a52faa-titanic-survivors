@@ -121,6 +121,51 @@ def test_run_produces_well_formed_result_record(monkeypatch, tmp_path, fake_tita
     json.dumps(result)
 
 
+def test_run_forwards_recognized_hyperparameter_overrides(monkeypatch, tmp_path, fake_titanic_dispatch):
+    """EVAL_PARAMETERS_JSON hyperparameter-tuning keys (eta, max_depth, ...)
+    must reach the real training call and the recorded result record, not
+    just eval-only knobs (k, num_round, seed, ...)."""
+    monkeypatch.setattr(run_eval, "ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setattr(run_eval, "RESULTS_JSON_PATH", str(tmp_path / "eval_results.json"))
+
+    result = run_eval.run(
+        {
+            "train_per_combo": 2,
+            "holdout_per_combo": 1,
+            "k": 2,
+            "num_round": 3,
+            "early_stopping_rounds": 9,
+            "eta": 0.05,
+            "max_depth": 6,
+            # Unrecognized/eval-only key: must NOT leak into XGBoost params.
+            "seed": 123,
+        }
+    )
+
+    calls = fake_titanic_dispatch["train_xgb_ensemble"]
+    assert len(calls) == 1
+    assert calls[0]["early_stopping_rounds"] == 9
+    assert calls[0]["param_overrides"] == {"eta": 0.05, "max_depth": 6}
+
+    assert result["hyperparameters"]["eta"] == 0.05
+    assert result["hyperparameters"]["max_depth"] == 6
+    assert result["hyperparameters"]["early_stopping_rounds"] == 9
+    assert result["configuration"]["hyperparameter_overrides"] == {"eta": 0.05, "max_depth": 6}
+
+    json.dumps(result)
+
+
+def test_run_with_no_hyperparameter_overrides_passes_none(monkeypatch, tmp_path, fake_titanic_dispatch):
+    monkeypatch.setattr(run_eval, "ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setattr(run_eval, "RESULTS_JSON_PATH", str(tmp_path / "eval_results.json"))
+
+    run_eval.run({"train_per_combo": 2, "holdout_per_combo": 1, "k": 2, "num_round": 3})
+
+    calls = fake_titanic_dispatch["train_xgb_ensemble"]
+    assert calls[0]["param_overrides"] is None
+    assert calls[0]["early_stopping_rounds"] == 20
+
+
 def test_main_emits_training_results_line(monkeypatch, tmp_path, fake_titanic_dispatch, capsys):
     monkeypatch.setattr(run_eval, "ARTIFACT_DIR", str(tmp_path / "artifacts"))
     results_path = tmp_path / "eval_results.json"
