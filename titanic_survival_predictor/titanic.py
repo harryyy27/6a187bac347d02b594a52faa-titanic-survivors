@@ -161,9 +161,16 @@ def build_keras_model(input_dim: int):
     return model
 
 
-def xgb_params():
-    """Hyperparameters for the XGBoost ensemble members."""
-    return {
+def xgb_params(overrides: dict | None = None) -> dict:
+    """Hyperparameters for the XGBoost ensemble members.
+
+    ``overrides`` may supply any subset of the known keys below to tune a
+    run (e.g. from an eval harness); unknown keys are ignored so a stray or
+    misspelled override can't silently reach ``xgb.train`` with an
+    unexpected parameter name. Callers that pass nothing get the original
+    default configuration unchanged.
+    """
+    defaults = {
         "max_depth": 4,
         "objective": "binary:logistic",
         "eta": 0.125,
@@ -173,12 +180,26 @@ def xgb_params():
         "eval_metric": "error",
         "colsample_bytree": 0.8,
     }
+    if overrides:
+        for key, value in overrides.items():
+            if key in defaults:
+                defaults[key] = value
+    return defaults
 
 
-def train_xgb_ensemble(train_x, train_y, k: int = 4, num_round: int = 25, model_dir: str = "."):
+def train_xgb_ensemble(
+    train_x,
+    train_y,
+    k: int = 4,
+    num_round: int = 25,
+    model_dir: str = ".",
+    param_overrides: dict | None = None,
+    early_stopping_rounds: int = 20,
+):
     """Train a k-fold XGBoost ensemble and persist each fold's model to disk."""
     import xgboost as xgb
 
+    params = xgb_params(param_overrides)
     num_samples = len(train_x) // k
     ensemble = []
     for i in range(k):
@@ -193,7 +214,9 @@ def train_xgb_ensemble(train_x, train_y, k: int = 4, num_round: int = 25, model_
         dtrain = xgb.DMatrix(partial_train_data, partial_train_targets)
         dval = xgb.DMatrix(val_data, val_targets)
         eval_list = [(dval, "eval"), (dtrain, "train")]
-        bst = xgb.train(xgb_params(), dtrain, num_round, eval_list, early_stopping_rounds=20)
+        bst = xgb.train(
+            params, dtrain, num_round, eval_list, early_stopping_rounds=early_stopping_rounds
+        )
         model_path = f"{model_dir}/xgb{i}.pickle.dat"
         pickle.dump(bst, open(model_path, "wb"))
         loaded_model = pickle.load(open(model_path, "rb"))

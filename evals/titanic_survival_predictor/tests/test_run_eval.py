@@ -116,8 +116,44 @@ def test_run_produces_well_formed_result_record(monkeypatch, tmp_path, fake_tita
     assert len(fake_titanic_dispatch["train_xgb_ensemble"]) == 1
     assert fake_titanic_dispatch["train_xgb_ensemble"][0]["k"] == 2
     assert fake_titanic_dispatch["train_xgb_ensemble"][0]["num_round"] == 3
+    # No xgb-param overrides supplied here, so an empty dict is threaded
+    # through and the default early_stopping_rounds is used.
+    assert fake_titanic_dispatch["train_xgb_ensemble"][0]["param_overrides"] == {}
+    assert fake_titanic_dispatch["train_xgb_ensemble"][0]["early_stopping_rounds"] == 20
 
     # Must be JSON-serializable, per the eval contract.
+    json.dumps(result)
+
+
+def test_run_threads_xgb_param_overrides_and_early_stopping(monkeypatch, tmp_path, fake_titanic_dispatch):
+    """A hyperparameter-optimization run must actually change what gets
+    trained with, not just relabel the same static defaults in the result
+    record."""
+    monkeypatch.setattr(run_eval, "ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setattr(run_eval, "RESULTS_JSON_PATH", str(tmp_path / "eval_results.json"))
+
+    result = run_eval.run(
+        {
+            "train_per_combo": 2,
+            "holdout_per_combo": 1,
+            "k": 2,
+            "num_round": 3,
+            "max_depth": 6,
+            "early_stopping_rounds": 30,
+        }
+    )
+
+    call = fake_titanic_dispatch["train_xgb_ensemble"][0]
+    assert call["param_overrides"] == {"max_depth": 6}
+    assert call["early_stopping_rounds"] == 30
+
+    # The recorded hyperparameters must reflect the merged/actual values
+    # used for training, not the untouched static defaults.
+    assert result["hyperparameters"]["max_depth"] == 6
+    assert result["hyperparameters"]["early_stopping_rounds"] == 30
+    # Untouched hyperparameters keep their defaults.
+    assert result["hyperparameters"]["objective"] == "binary:logistic"
+
     json.dumps(result)
 
 
