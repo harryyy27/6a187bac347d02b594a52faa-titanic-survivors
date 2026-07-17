@@ -175,7 +175,14 @@ def xgb_params():
     }
 
 
-def train_xgb_ensemble(train_x, train_y, k: int = 4, num_round: int = 25, model_dir: str = "."):
+def train_xgb_ensemble(
+    train_x,
+    train_y,
+    k: int = 4,
+    num_round: int = 25,
+    model_dir: str = ".",
+    early_stopping_rounds: int = 20,
+):
     """Train a k-fold XGBoost ensemble and persist each fold's model to disk."""
     import xgboost as xgb
 
@@ -193,7 +200,9 @@ def train_xgb_ensemble(train_x, train_y, k: int = 4, num_round: int = 25, model_
         dtrain = xgb.DMatrix(partial_train_data, partial_train_targets)
         dval = xgb.DMatrix(val_data, val_targets)
         eval_list = [(dval, "eval"), (dtrain, "train")]
-        bst = xgb.train(xgb_params(), dtrain, num_round, eval_list, early_stopping_rounds=20)
+        bst = xgb.train(
+            xgb_params(), dtrain, num_round, eval_list, early_stopping_rounds=early_stopping_rounds
+        )
         model_path = f"{model_dir}/xgb{i}.pickle.dat"
         pickle.dump(bst, open(model_path, "wb"))
         loaded_model = pickle.load(open(model_path, "rb"))

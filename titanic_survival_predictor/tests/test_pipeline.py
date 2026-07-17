@@ -187,9 +187,31 @@ def test_train_xgb_ensemble_trains_k_folds_without_real_xgboost(fake_xgboost, tm
     for call in fake_xgboost._calls["train"]:
         assert call["num_round"] == 3
         assert call["params"]["objective"] == "binary:logistic"
+        # Default early_stopping_rounds is preserved when the caller omits it.
+        assert call["early_stopping_rounds"] == 20
     # Each fold's model artifact must be handed off to disk and reloaded.
     for i in range(4):
         assert (tmp_path / f"xgb{i}.pickle.dat").exists()
+
+
+def test_train_xgb_ensemble_threads_early_stopping_rounds_to_xgboost(fake_xgboost, tmp_path):
+    """Regression test for a boundary bug: early_stopping_rounds must reach the
+    real xgb.train() call, not just be accepted and silently dropped."""
+    train_x = np.arange(40).reshape(20, 2).astype(float)
+    train_y = np.array([0, 1] * 10)
+
+    titanic.train_xgb_ensemble(
+        train_x,
+        train_y,
+        k=4,
+        num_round=3,
+        model_dir=str(tmp_path),
+        early_stopping_rounds=5,
+    )
+
+    assert len(fake_xgboost._calls["train"]) == 4
+    for call in fake_xgboost._calls["train"]:
+        assert call["early_stopping_rounds"] == 5
 
 
 def test_predict_with_ensemble_majority_votes_across_models(fake_xgboost):

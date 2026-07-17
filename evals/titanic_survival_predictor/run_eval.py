@@ -208,7 +208,12 @@ def run(params: dict) -> dict:
     train_x = train_proc.drop(["Survived"], axis=1).to_numpy()
 
     ensemble = titanic.train_xgb_ensemble(
-        train_x, train_y, k=k, num_round=num_round, model_dir=ARTIFACT_DIR
+        train_x,
+        train_y,
+        k=k,
+        num_round=num_round,
+        model_dir=ARTIFACT_DIR,
+        early_stopping_rounds=early_stopping_rounds,
     )
 
     passenger_id = holdout_proc["PassengerId"]

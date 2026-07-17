@@ -96,7 +96,13 @@ def test_run_produces_well_formed_result_record(monkeypatch, tmp_path, fake_tita
     monkeypatch.setattr(run_eval, "RESULTS_JSON_PATH", str(tmp_path / "eval_results.json"))
 
     result = run_eval.run(
-        {"train_per_combo": 2, "holdout_per_combo": 1, "k": 2, "num_round": 3}
+        {
+            "train_per_combo": 2,
+            "holdout_per_combo": 1,
+            "k": 2,
+            "num_round": 3,
+            "early_stopping_rounds": 5,
+        }
     )
 
     assert result["primary_metric"] == "accuracy"
@@ -106,16 +112,21 @@ def test_run_produces_well_formed_result_record(monkeypatch, tmp_path, fake_tita
     assert result["model"]["type"] == "xgboost.Booster"
     assert result["hyperparameters"]["k"] == 2
     assert result["hyperparameters"]["num_round"] == 3
+    assert result["hyperparameters"]["early_stopping_rounds"] == 5
     assert result["hyperparameters"]["objective"] == "binary:logistic"
     assert result["configuration"]["run_type"] == "baseline"
     assert result["configuration"]["eval_kind"] == "model_training"
     assert "fold_errors" in result["additional_metadata"]
 
     # The training dispatch actually ran through our fakes, with the
-    # parameters run_eval was given (not real xgboost).
+    # parameters run_eval was given (not real xgboost). This also guards
+    # the run_eval <-> titanic.train_xgb_ensemble boundary: early_stopping_rounds
+    # must be threaded through to the real training call, not just recorded in
+    # the result's hyperparameters dict.
     assert len(fake_titanic_dispatch["train_xgb_ensemble"]) == 1
     assert fake_titanic_dispatch["train_xgb_ensemble"][0]["k"] == 2
     assert fake_titanic_dispatch["train_xgb_ensemble"][0]["num_round"] == 3
+    assert fake_titanic_dispatch["train_xgb_ensemble"][0]["early_stopping_rounds"] == 5
 
     # Must be JSON-serializable, per the eval contract.
     json.dumps(result)

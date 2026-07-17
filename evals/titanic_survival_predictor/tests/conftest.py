@@ -50,7 +50,9 @@ except ImportError:
         test_out = test[keep_test].fillna(0.0).copy()
         return train_out, test_out
 
-    def _stub_train_xgb_ensemble(train_x, train_y, k=4, num_round=25, model_dir="."):
+    def _stub_train_xgb_ensemble(
+        train_x, train_y, k=4, num_round=25, model_dir=".", early_stopping_rounds=20
+    ):
         return [f"stub-fold-{i}" for i in range(k)]
 
     def _stub_predict_with_ensemble(ensemble, test_x):
@@ -76,9 +78,17 @@ def fake_titanic_dispatch(monkeypatch):
 
     calls = {"train_xgb_ensemble": [], "predict_with_ensemble": []}
 
-    def fake_train_xgb_ensemble(train_x, train_y, k=4, num_round=25, model_dir="."):
+    def fake_train_xgb_ensemble(
+        train_x, train_y, k=4, num_round=25, model_dir=".", early_stopping_rounds=20
+    ):
         calls["train_xgb_ensemble"].append(
-            {"n_rows": len(train_x), "k": k, "num_round": num_round, "model_dir": model_dir}
+            {
+                "n_rows": len(train_x),
+                "k": k,
+                "num_round": num_round,
+                "model_dir": model_dir,
+                "early_stopping_rounds": early_stopping_rounds,
+            }
         )
         return [f"fold-{i}" for i in range(k)]
 
