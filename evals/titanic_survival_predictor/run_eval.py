@@ -47,8 +47,25 @@ DEFAULT_HOLDOUT_PER_COMBO = 3
 DEFAULT_K = 4
 DEFAULT_NUM_ROUND = 25
 
+# xgb.train hyperparameters that experiments may override via
+# EVAL_PARAMETERS_JSON, on top of the production defaults in
+# titanic.xgb_params(). Any key not supplied keeps its production default.
+_XGB_OVERRIDE_KEYS = (
+    "max_depth",
+    "eta",
+    "min_child_weight",
+    "gamma",
+    "alpha",
+    "colsample_bytree",
+)
+
 RESULTS_JSON_PATH = os.path.join(_THIS_DIR, "eval_results.json")
 ARTIFACT_DIR = os.path.join(_THIS_DIR, "artifacts")
+
+
+def _extract_xgb_overrides(params: dict) -> dict:
+    """Pull recognized xgb hyperparameter overrides out of the eval params."""
+    return {key: params[key] for key in _XGB_OVERRIDE_KEYS if key in params}
 
 # (sex, title_group) pairs used to build the synthetic passenger population.
 # Kept to the four most common real-world titles so every level stays well
@@ -193,6 +210,7 @@ def run(params: dict) -> dict:
     k = int(params.get("k", DEFAULT_K))
     num_round = int(params.get("num_round", DEFAULT_NUM_ROUND))
     early_stopping_rounds = int(params.get("early_stopping_rounds", 20))
+    xgb_param_overrides = _extract_xgb_overrides(params)
 
     os.makedirs(ARTIFACT_DIR, exist_ok=True)
 
@@ -208,7 +226,13 @@ def run(params: dict) -> dict:
     train_x = train_proc.drop(["Survived"], axis=1).to_numpy()
 
     ensemble = titanic.train_xgb_ensemble(
-        train_x, train_y, k=k, num_round=num_round, model_dir=ARTIFACT_DIR
+        train_x,
+        train_y,
+        k=k,
+        num_round=num_round,
+        model_dir=ARTIFACT_DIR,
+        xgb_param_overrides=xgb_param_overrides or None,
+        early_stopping_rounds=early_stopping_rounds,
     )
 
     passenger_id = holdout_proc["PassengerId"]
@@ -227,7 +251,7 @@ def run(params: dict) -> dict:
 
     duration = time.time() - start
 
-    model_hyperparameters = dict(titanic.xgb_params())
+    model_hyperparameters = dict(titanic.xgb_params(xgb_param_overrides or None))
     model_hyperparameters.update(
         {
             "k": k,
@@ -271,6 +295,7 @@ def run(params: dict) -> dict:
             "split": "stratified_by_pclass_sex_title_embarked",
             "run_type": "baseline",
             "eval_kind": "model_training",
+            "xgb_param_overrides": xgb_param_overrides,
         },
         "additional_metadata": {
             "fold_errors": fold_errors,

@@ -1,0 +1,95 @@
+[
+  {
+    "run_index": 0,
+    "run_type": "baseline",
+    "status": "completed",
+    "hyperparameters": {
+      "max_depth": 4,
+      "objective": "binary:logistic",
+      "eta": 0.125,
+      "min_child_weight": 1,
+      "gamma": 1,
+      "alpha": 0.4,
+      "eval_metric": "error",
+      "colsample_bytree": 0.8,
+      "k": 4,
+      "num_round": 25,
+      "early_stopping_rounds": 20
+    },
+    "changed_dimensions": [],
+    "primary_metric": {
+      "name": "accuracy",
+      "direction": "maximize"
+    },
+    "primary_metric_value": 0.8240740740740741,
+    "metrics": {
+      "accuracy": 0.8240740740740741,
+      "mean_cv_error": 0.2847222222222222
+    },
+    "artifact_uri": "evals/titanic_survival_predictor/artifacts",
+    "completed_at": null
+  },
+  {
+    "run_index": 1,
+    "run_type": "baseline",
+    "status": "failed",
+    "hyperparameters": {},
+    "changed_dimensions": [],
+    "primary_metric": {
+      "name": "accuracy",
+      "direction": "maximize"
+    },
+    "primary_metric_value": null,
+    "metrics": {},
+    "artifact_uri": null,
+    "completed_at": null
+  },
+  {
+    "run_index": 2,
+    "run_type": "experiment",
+    "status": "failed",
+    "hyperparameters": {},
+    "changed_dimensions": [],
+    "primary_metric": {
+      "name": "accuracy",
+      "direction": "maximize"
+    },
+    "primary_metric_value": null,
+    "metrics": {},
+    "artifact_uri": null,
+    "completed_at": null
+  },
+  {
+    "run_index": 3,
+    "run_type": "experiment",
+    "status": "completed",
+    "hyperparameters": {
+      "max_depth": 6,
+      "objective": "binary:logistic",
+      "eta": 0.125,
+      "min_child_weight": 1,
+      "gamma": 1,
+      "alpha": 0.4,
+      "eval_metric": "error",
+      "colsample_bytree": 0.8,
+      "k": 4,
+      "num_round": 25,
+      "early_stopping_rounds": 20
+    },
+    "changed_dimensions": [
+      "hyperparameters.max_depth",
+      "runtime_parameters.max_depth"
+    ],
+    "primary_metric": {
+      "name": "accuracy",
+      "direction": "maximize"
+    },
+    "primary_metric_value": 0.8240740740740741,
+    "metrics": {
+      "accuracy": 0.8240740740740741,
+      "mean_cv_error": 0.2847222222222222
+    },
+    "artifact_uri": "evals/titanic_survival_predictor/artifacts",
+    "completed_at": null
+  }
+]

@@ -161,9 +161,14 @@ def build_keras_model(input_dim: int):
     return model
 
 
-def xgb_params():
-    """Hyperparameters for the XGBoost ensemble members."""
-    return {
+def xgb_params(overrides: dict | None = None):
+    """Hyperparameters for the XGBoost ensemble members.
+
+    ``overrides`` lets callers (e.g. the eval harness driving hyperparameter
+    experiments) tweak individual values without touching these production
+    defaults; any key not present in ``overrides`` keeps its default value.
+    """
+    params = {
         "max_depth": 4,
         "objective": "binary:logistic",
         "eta": 0.125,
@@ -173,12 +178,29 @@ def xgb_params():
         "eval_metric": "error",
         "colsample_bytree": 0.8,
     }
+    if overrides:
+        params.update(overrides)
+    return params
 
 
-def train_xgb_ensemble(train_x, train_y, k: int = 4, num_round: int = 25, model_dir: str = "."):
-    """Train a k-fold XGBoost ensemble and persist each fold's model to disk."""
+def train_xgb_ensemble(
+    train_x,
+    train_y,
+    k: int = 4,
+    num_round: int = 25,
+    model_dir: str = ".",
+    xgb_param_overrides: dict | None = None,
+    early_stopping_rounds: int = 20,
+):
+    """Train a k-fold XGBoost ensemble and persist each fold's model to disk.
+
+    ``xgb_param_overrides`` and ``early_stopping_rounds`` allow hyperparameter
+    experiments to be driven end-to-end (e.g. from the eval harness) without
+    changing the production defaults returned by ``xgb_params()``.
+    """
     import xgboost as xgb
 
+    params = xgb_params(xgb_param_overrides)
     num_samples = len(train_x) // k
     ensemble = []
     for i in range(k):
@@ -193,7 +215,7 @@ def train_xgb_ensemble(train_x, train_y, k: int = 4, num_round: int = 25, model_
         dtrain = xgb.DMatrix(partial_train_data, partial_train_targets)
         dval = xgb.DMatrix(val_data, val_targets)
         eval_list = [(dval, "eval"), (dtrain, "train")]
-        bst = xgb.train(xgb_params(), dtrain, num_round, eval_list, early_stopping_rounds=20)
+        bst = xgb.train(params, dtrain, num_round, eval_list, early_stopping_rounds=early_stopping_rounds)
         model_path = f"{model_dir}/xgb{i}.pickle.dat"
         pickle.dump(bst, open(model_path, "wb"))
         loaded_model = pickle.load(open(model_path, "rb"))

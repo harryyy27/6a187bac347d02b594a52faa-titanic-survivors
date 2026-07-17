@@ -169,6 +169,20 @@ def test_xgb_params_returns_expected_hyperparameter_keys():
     assert params["max_depth"] == 4
 
 
+def test_xgb_params_merges_overrides_without_mutating_defaults():
+    overridden = titanic.xgb_params({"max_depth": 6, "eta": 0.05})
+
+    assert overridden["max_depth"] == 6
+    assert overridden["eta"] == 0.05
+    # Untouched keys keep their production default.
+    assert overridden["colsample_bytree"] == 0.8
+
+    # A later no-override call must not see the previous call's overrides.
+    defaults = titanic.xgb_params()
+    assert defaults["max_depth"] == 4
+    assert defaults["eta"] == 0.125
+
+
 # ---------------------------------------------------------------------------
 # Dispatch tests: project code driving stubbed heavy engines
 # ---------------------------------------------------------------------------
@@ -190,6 +204,32 @@ def test_train_xgb_ensemble_trains_k_folds_without_real_xgboost(fake_xgboost, tm
     # Each fold's model artifact must be handed off to disk and reloaded.
     for i in range(4):
         assert (tmp_path / f"xgb{i}.pickle.dat").exists()
+
+
+def test_train_xgb_ensemble_forwards_param_overrides_and_early_stopping(fake_xgboost, tmp_path):
+    """Hyperparameter-tuning experiments override individual xgb params and
+    the early-stopping window; both must actually reach xgb.train (not just
+    be recorded), so this asserts on the fake xgboost dispatch itself."""
+    train_x = np.arange(40).reshape(20, 2).astype(float)
+    train_y = np.array([0, 1] * 10)
+
+    titanic.train_xgb_ensemble(
+        train_x,
+        train_y,
+        k=2,
+        num_round=3,
+        model_dir=str(tmp_path),
+        xgb_param_overrides={"max_depth": 6, "eta": 0.05},
+        early_stopping_rounds=10,
+    )
+
+    assert len(fake_xgboost._calls["train"]) == 2
+    for call in fake_xgboost._calls["train"]:
+        assert call["params"]["max_depth"] == 6
+        assert call["params"]["eta"] == 0.05
+        # Untouched params keep their production default.
+        assert call["params"]["colsample_bytree"] == 0.8
+        assert call["early_stopping_rounds"] == 10
 
 
 def test_predict_with_ensemble_majority_votes_across_models(fake_xgboost):
