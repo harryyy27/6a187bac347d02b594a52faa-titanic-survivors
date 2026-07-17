@@ -49,6 +49,7 @@ or hand off to a tool such as `run_test`, `request_human_input`, or `run_remote_
 
 ## Remote Container Eval Execution & ML Training (MANDATORY GUIDELINES)
 - **Active Mode:** optimize (Max Iterations: 3)
+- **User Tweak / Experimentation Guidance:** Optimise for accuracy. Feature engineering, feature selection and hyperparameter optimisation
 
 ## Active Optimization History
 The target metric is: **accuracy** (maximize).
