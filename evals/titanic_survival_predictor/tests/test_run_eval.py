@@ -116,9 +116,56 @@ def test_run_produces_well_formed_result_record(monkeypatch, tmp_path, fake_tita
     assert len(fake_titanic_dispatch["train_xgb_ensemble"]) == 1
     assert fake_titanic_dispatch["train_xgb_ensemble"][0]["k"] == 2
     assert fake_titanic_dispatch["train_xgb_ensemble"][0]["num_round"] == 3
+    assert fake_titanic_dispatch["train_xgb_ensemble"][0]["early_stopping_rounds"] == 20
+    assert fake_titanic_dispatch["train_xgb_ensemble"][0]["xgb_param_overrides"] is None
 
     # Must be JSON-serializable, per the eval contract.
     json.dumps(result)
+
+
+def test_run_forwards_hyperparameter_overrides_to_training(monkeypatch, tmp_path, fake_titanic_dispatch):
+    """Booster hyperparameters supplied via EVAL_PARAMETERS_JSON (surfaced as
+    run_remote_eval's `parameters`) must actually reach the real training
+    entry point -- and the recorded run record must reflect what was really
+    trained, not the static defaults -- so hyperparameter-optimization
+    experiments have a real effect."""
+    monkeypatch.setattr(run_eval, "ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setattr(run_eval, "RESULTS_JSON_PATH", str(tmp_path / "eval_results.json"))
+
+    result = run_eval.run(
+        {
+            "train_per_combo": 2,
+            "holdout_per_combo": 1,
+            "k": 2,
+            "num_round": 3,
+            "early_stopping_rounds": 5,
+            "max_depth": 6,
+        }
+    )
+
+    call = fake_titanic_dispatch["train_xgb_ensemble"][0]
+    assert call["early_stopping_rounds"] == 5
+    assert call["xgb_param_overrides"] == {"max_depth": 6}
+
+    # The recorded hyperparameters reflect the override, not the default.
+    assert result["hyperparameters"]["max_depth"] == 6
+    assert result["hyperparameters"]["early_stopping_rounds"] == 5
+    # Untouched defaults are still present and unchanged.
+    assert result["hyperparameters"]["eta"] == 0.125
+
+    json.dumps(result)
+
+
+def test_run_omits_overrides_dict_when_no_hyperparameters_given(monkeypatch, tmp_path, fake_titanic_dispatch):
+    """No booster overrides supplied -> the pipeline is called with
+    xgb_param_overrides=None, so titanic.xgb_params() falls back to its own
+    defaults exactly as before this change (backward compatible)."""
+    monkeypatch.setattr(run_eval, "ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setattr(run_eval, "RESULTS_JSON_PATH", str(tmp_path / "eval_results.json"))
+
+    run_eval.run({"train_per_combo": 2, "holdout_per_combo": 1, "k": 2, "num_round": 3})
+
+    assert fake_titanic_dispatch["train_xgb_ensemble"][0]["xgb_param_overrides"] is None
 
 
 def test_main_emits_training_results_line(monkeypatch, tmp_path, fake_titanic_dispatch, capsys):

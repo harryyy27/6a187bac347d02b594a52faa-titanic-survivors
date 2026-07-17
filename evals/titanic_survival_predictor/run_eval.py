@@ -47,6 +47,21 @@ DEFAULT_HOLDOUT_PER_COMBO = 3
 DEFAULT_K = 4
 DEFAULT_NUM_ROUND = 25
 
+# Booster hyperparameters that may be overridden per-run via
+# EVAL_PARAMETERS_JSON / run_remote_eval's `parameters`, for
+# hyperparameter-optimization experiments. Any subset may be supplied; the
+# rest fall back to titanic.xgb_params()'s defaults.
+XGB_OVERRIDABLE_KEYS = (
+    "max_depth",
+    "eta",
+    "min_child_weight",
+    "gamma",
+    "alpha",
+    "colsample_bytree",
+    "objective",
+    "eval_metric",
+)
+
 RESULTS_JSON_PATH = os.path.join(_THIS_DIR, "eval_results.json")
 ARTIFACT_DIR = os.path.join(_THIS_DIR, "artifacts")
 
@@ -193,6 +208,7 @@ def run(params: dict) -> dict:
     k = int(params.get("k", DEFAULT_K))
     num_round = int(params.get("num_round", DEFAULT_NUM_ROUND))
     early_stopping_rounds = int(params.get("early_stopping_rounds", 20))
+    xgb_overrides = {key: params[key] for key in XGB_OVERRIDABLE_KEYS if key in params}
 
     os.makedirs(ARTIFACT_DIR, exist_ok=True)
 
@@ -208,7 +224,13 @@ def run(params: dict) -> dict:
     train_x = train_proc.drop(["Survived"], axis=1).to_numpy()
 
     ensemble = titanic.train_xgb_ensemble(
-        train_x, train_y, k=k, num_round=num_round, model_dir=ARTIFACT_DIR
+        train_x,
+        train_y,
+        k=k,
+        num_round=num_round,
+        model_dir=ARTIFACT_DIR,
+        early_stopping_rounds=early_stopping_rounds,
+        xgb_param_overrides=xgb_overrides or None,
     )
 
     passenger_id = holdout_proc["PassengerId"]
@@ -227,7 +249,10 @@ def run(params: dict) -> dict:
 
     duration = time.time() - start
 
-    model_hyperparameters = dict(titanic.xgb_params())
+    # Resolved hyperparameters actually used for training (defaults merged
+    # with any per-run overrides), so the recorded run record always
+    # reflects what was really trained.
+    model_hyperparameters = dict(titanic.xgb_params(xgb_overrides or None))
     model_hyperparameters.update(
         {
             "k": k,
