@@ -111,6 +111,41 @@ def scale_fare(train, test):
     return train, test
 
 
+def add_fare_per_person(df):
+    """Add FarePerPerson (Fare divided by family unit size, i.e. Family_Size + 1).
+
+    A classic Titanic feature-engineering signal: raw Fare is confounded with
+    both Pclass and the number of tickets a fare covers (families/groups
+    often shared a single fare), so dividing by family unit size gives a
+    per-individual price that carries information Fare and Pclass alone do
+    not. Requires ``Family_Size`` (see ``add_family_features``) and a
+    zero-free ``Fare`` column (see ``fix_zero_fares``) to already be present.
+    """
+    df = df.copy()
+    df["FarePerPerson"] = df["Fare"] / (df["Family_Size"] + 1)
+    return df
+
+
+def scale_fare_per_person(train, test):
+    """Log-transform and standardize the FarePerPerson column using train statistics.
+
+    Mirrors ``scale_fare`` exactly, applied to the derived per-person fare
+    instead of the raw fare, so the new feature reaches the model on the same
+    scale/distribution basis as the existing Fare feature.
+    """
+    train = train.copy()
+    test = test.copy()
+    train["FarePerPerson"] = train["FarePerPerson"].apply(lambda x: np.log(x))
+    fare_per_person_mean = train["FarePerPerson"].mean()
+    fare_per_person_std = train["FarePerPerson"].std()
+    test["FarePerPerson"] = test["FarePerPerson"].apply(lambda x: np.log(x))
+    test["FarePerPerson"] -= fare_per_person_mean
+    test["FarePerPerson"] /= fare_per_person_std
+    train["FarePerPerson"] -= fare_per_person_mean
+    train["FarePerPerson"] /= fare_per_person_std
+    return train, test
+
+
 def scale_age(train, test):
     """Standardize the Age column using train statistics."""
     train = train.copy()
@@ -144,7 +179,10 @@ def prepare_features(train, test):
     train = consolidate_rare_titles(train)
     test = consolidate_rare_titles(test)
     train, test = fix_zero_fares(train, test)
+    train = add_fare_per_person(train)
+    test = add_fare_per_person(test)
     train, test = scale_fare(train, test)
+    train, test = scale_fare_per_person(train, test)
     train, test = scale_age(train, test)
     train, test = encode_categoricals(train, test)
     return train, test

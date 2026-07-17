@@ -142,6 +142,35 @@ def test_scale_fare_standardizes_using_train_statistics():
     assert train_out["Fare"].std() == pytest.approx(1.0, abs=1e-9)
 
 
+def test_add_fare_per_person_divides_by_family_unit_size():
+    df = pd.DataFrame({"Fare": [10.0, 30.0, 8.0], "Family_Size": [0, 2, 1]})
+    df = titanic.add_fare_per_person(df)
+
+    assert list(df["FarePerPerson"]) == [10.0, 10.0, 4.0]
+
+
+def test_scale_fare_per_person_standardizes_using_train_statistics():
+    train = pd.DataFrame({"FarePerPerson": [np.e, np.e**2, np.e**3]})
+    test = pd.DataFrame({"FarePerPerson": [np.e**2]})
+
+    train_out, test_out = titanic.scale_fare_per_person(train, test)
+
+    assert train_out["FarePerPerson"].mean() == pytest.approx(0.0, abs=1e-9)
+    assert train_out["FarePerPerson"].std() == pytest.approx(1.0, abs=1e-9)
+    assert test_out.loc[0, "FarePerPerson"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_prepare_features_includes_fare_per_person_column():
+    """Integration check: the new feature must survive the full engineering
+    chain and reach the model-ready frame on both train and test sides."""
+    train, test = titanic.prepare_features(_sample_train_df(), _sample_test_df())
+
+    assert "FarePerPerson" in train.columns
+    assert "FarePerPerson" in test.columns
+    assert train["FarePerPerson"].notna().all()
+    assert test["FarePerPerson"].notna().all()
+
+
 def test_scale_age_standardizes_using_train_statistics():
     train = pd.DataFrame({"Age": [20.0, 30.0, 40.0]})
     test = pd.DataFrame({"Age": [30.0]})
