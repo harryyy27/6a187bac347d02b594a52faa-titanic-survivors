@@ -20,6 +20,7 @@ RUN python -m pip install --no-cache-dir --upgrade pip \
 COPY titanic.py ./titanic.py
 COPY tests/ ./tests/
 
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
 
 CMD ["pytest", "tests/", "-v"]
