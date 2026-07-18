@@ -18,3 +18,13 @@ services:
     expose:
       - 8000
     command: ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000} --reload --reload-dir /workspace/repo/api"]
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.dev
+    ports:
+      - "5173:5173"
+    expose:
+      - 5173
+    command: ["sh", "-c", "npm run dev -- --host 0.0.0.0 --port 5173"]
+    x-install-command: ["sh", "-c", "ln -sf /deps/node_modules ./node_modules"]

@@ -1,0 +1,31 @@
+# Minimal test image for the web component.
+#
+# Runs only the harness/smoke unit test suite (Vitest) against
+# project-owned code (src/utils/add.ts) using the reusable
+# testWrapperTimeout wrapper. Production packages (react, axios,
+# zustand, ...) are not required by this suite since tests/setup.ts
+# stubs/cleans up before any accidental import, so they are declared
+# in package.json but not exercised here.
+FROM node:20
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm install --no-audit --no-fund \
+    && which node \
+    && which npm \
+    && ./node_modules/.bin/vitest --version
+
+COPY tsconfig.json ./
+COPY vitest.config.ts ./
+COPY .env.test ./
+COPY src/ ./src/
+COPY tests/ ./tests/
+
+# run_test overrides CMD directly, bypassing any startup symlink step, so
+# make the preinstalled packages discoverable via PATH regardless of the
+# command that is ultimately invoked.
+ENV PATH="/app/node_modules/.bin:${PATH}" \
+    NODE_ENV=test
+
+CMD ["npm", "run", "test"]

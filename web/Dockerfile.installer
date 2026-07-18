@@ -1,0 +1,12 @@
+# installer service: produces a reproducible package-lock.json artifact
+# from the package.json manifest. Does not install any dependencies into
+# node_modules -- lockfile resolution only.
+FROM node:20
+
+WORKDIR /app
+
+COPY package.json ./package.json
+
+RUN npm install --package-lock-only --no-audit --no-fund
+
+CMD ["cat", "package-lock.json"]

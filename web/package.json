@@ -1,0 +1,49 @@
+{
+  "name": "titanic-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --reporter=default --silent=false",
+    "posttest": "true",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "react": "*",
+    "react-dom": "*",
+    "axios": "*",
+    "zustand": "*",
+    "react-hook-form": "*",
+    "zod": "*",
+    "@hookform/resolvers": "*",
+    "lottie-web": "*",
+    "clsx": "*"
+  },
+  "devDependencies": {
+    "@types/react": "*",
+    "@types/react-dom": "*",
+    "@types/node": "*",
+    "@vitejs/plugin-react": "*",
+    "typescript": "*",
+    "vite": "*",
+    "vitest": "*",
+    "@playwright/test": "*",
+    "eslint": "*",
+    "@typescript-eslint/parser": "*",
+    "@typescript-eslint/eslint-plugin": "*",
+    "eslint-plugin-react": "*",
+    "eslint-plugin-react-hooks": "*",
+    "eslint-plugin-import": "*",
+    "eslint-config-prettier": "*",
+    "prettier": "*"
+  }
+}
