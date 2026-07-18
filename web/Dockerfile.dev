@@ -1,0 +1,37 @@
+# Dev/preview image for the web component.
+#
+# Source is mounted dynamically via a Kubernetes PVC at
+# /workspace/repo/web at runtime, so no application source is copied
+# here. Dependencies are installed into /deps/node_modules (a path
+# outside the mount) so they survive the mount shadowing anything the
+# image wrote under /workspace. At container startup, x-install-command
+# (in docker-compose.dev.yml) symlinks /deps/node_modules into the
+# live workspace so Node's module resolution finds them relative to
+# the mounted source. Runs the Vite dev server with hot reload against
+# the live mounted source.
+FROM node:20-slim
+
+WORKDIR /tmp/build
+
+# Copy only the dependency manifests to resolve/install into /deps.
+COPY package.json package-lock.json* ./
+
+RUN mkdir -p /deps \
+    && cp package.json /deps/package.json \
+    && ([ -f package-lock.json ] && cp package-lock.json /deps/package-lock.json || true) \
+    && cd /deps \
+    && npm install --no-audit --no-fund \
+    && which node \
+    && which npm \
+    && which ln \
+    && ./node_modules/.bin/vite --version
+
+ENV PATH="/deps/node_modules/.bin:${PATH}" \
+    CHOKIDAR_USEPOLLING=true
+
+WORKDIR /workspace/repo/web
+
+EXPOSE 5173
+
+# No source copied: /workspace/repo/web is populated by the runtime PVC mount.
+CMD ["sh", "-c", "ln -sf /deps/node_modules ./node_modules && npm run dev -- --host 0.0.0.0 --port 5173"]

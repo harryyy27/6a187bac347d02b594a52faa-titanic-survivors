@@ -1,0 +1,39 @@
+# Minimal test image for the web component.
+#
+# Runs only the harness/smoke unit test suite (Vitest) against
+# project-owned code (src/utils/add.ts) using the reusable
+# testWrapperTimeout wrapper. Production packages (react, axios,
+# zustand, ...) are not required by this suite since tests/setup.ts
+# stubs/cleans up before any accidental import, so they are declared
+# in package.json but not exercised here.
+FROM node:20-slim
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm install --no-audit --no-fund \
+    && which node \
+    && which npm \
+    && ./node_modules/.bin/vitest --version
+
+COPY tsconfig.json ./
+COPY vitest.config.ts ./
+COPY .env.test ./
+COPY src/ ./src/
+COPY tests/ ./tests/
+
+# run_test overrides CMD directly (and re-clones/runs the test command
+# against a live checkout at /workspace/repo/web rather than this image's
+# /app), bypassing any startup symlink step here. Two safety nets make the
+# packages baked into /app/node_modules discoverable regardless of where
+# the command actually executes from:
+#   1. PATH includes /app/node_modules/.bin for direct binary invocation.
+#   2. package.json's "pretest" script symlinks /app/node_modules into the
+#      current working directory (only when it exists and nothing is
+#      already there), so Node's ESM resolver -- which does not honor
+#      NODE_PATH -- can still find packages like `vitest/config` when
+#      vitest.config.ts is loaded from the live checkout.
+ENV PATH="/app/node_modules/.bin:${PATH}" \
+    NODE_ENV=test
+
+CMD ["npm", "run", "test"]

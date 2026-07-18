@@ -1,0 +1,45 @@
+:root {
+  --color-bg: #0b1d33;
+  --color-surface: #122a47;
+  --color-primary: #c9a227;
+  --color-text: #f5f5f5;
+  color-scheme: dark;
+  font-family:
+    system-ui,
+    -apple-system,
+    Avenir,
+    Helvetica,
+    Arial,
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+a {
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+button {
+  border-radius: 8px;
+  border: 1px solid var(--color-primary);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  cursor: pointer;
+}
