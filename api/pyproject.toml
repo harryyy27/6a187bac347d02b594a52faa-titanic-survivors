@@ -1,0 +1,57 @@
+[tool.poetry]
+name = "titanic-survivors-api"
+version = "0.1.0"
+description = "FastAPI service for Titanic Survivors"
+authors = ["placeholder <placeholder@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "*"
+uvicorn = "*"
+pydantic = "*"
+pandas = "*"
+numpy = "*"
+scikit-learn = "*"
+xgboost = "*"
+joblib = "*"
+python-dotenv = "*"
+orjson = "*"
+starlette = "*"
+aiofiles = "*"
+requests = "*"
+typing-extensions = "*"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "*"
+mypy = "*"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+# Intended lint command (run locally or in CI via subprocess):
+#   poetry run ruff check --fix .
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [
+    ".venv",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "dist",
+    "build",
+    ".git",
+]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S", "ANN", "COM", "Q", "RET"]
+
+[tool.mypy]
+python_version = "3.11"
+strict_optional = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+cache_dir = ".mypy_cache"

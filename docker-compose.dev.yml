@@ -9,3 +9,12 @@ services:
       - 8888
     command: ["/deps/venv/bin/jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--notebook-dir=/app"]
     x-install-command: ["ln", "-sfn", "/deps/venv", "/app/.venv"]
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8000:8000"
+    expose:
+      - 8000
+    command: ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000} --reload --reload-dir /workspace/repo/api"]
