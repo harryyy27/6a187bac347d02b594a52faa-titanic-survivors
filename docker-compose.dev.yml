@@ -1,14 +1,4 @@
 services:
-  titanic_survival_predictor:
-    build:
-      context: ./titanic_survival_predictor
-      dockerfile: Dockerfile.dev
-    ports:
-      - "8888:8888"
-    expose:
-      - 8888
-    command: ["/deps/venv/bin/jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root", "--notebook-dir=/app"]
-    x-install-command: ["ln", "-sfn", "/deps/venv", "/app/.venv"]
   api:
     build:
       context: ./api
