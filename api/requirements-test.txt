@@ -1,1 +1,20 @@
+# Test-only dependency manifest for the api component's test image.
+#
+# Restricted to exactly what tests/ directly imports and asserts against
+# (or, for fastapi/starlette/pydantic/orjson/python-dotenv/uvicorn, what the
+# app code under test actually runs on -- these are the framework we are
+# testing the wiring of, not incidental third-party output we assert on).
+#
+# Heavy, unrelated production packages (pandas, numpy, scikit-learn,
+# xgboost, joblib, aiofiles) are intentionally NOT listed here -- no test
+# calls their functions in an assertion, so they are stubbed in
+# tests/integration/conftest.py instead of installed.
 pytest
+fastapi
+pydantic
+starlette
+python-dotenv
+orjson
+uvicorn
+requests
+httpx

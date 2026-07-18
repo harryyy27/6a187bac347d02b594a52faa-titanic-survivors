@@ -1,97 +1,80 @@
-## Database & Infrastructure Provisioning
+# Integration Test Phase
 
-If any step requires a database (MongoDB or PostgreSQL):
-1. Call `check_database_exists` first with the relevant .env file path and variable name.
-2. Only call `create_mongo_database` or `create_postgres_database` if it does not already exist.
-   These tools provision a real hosted database and write the connection string to the env file.
-3. Never spin up a local database process or use docker-compose for database services — use the tools above.
+You just finished implementing a workflow. Now run integration tests through the test runner.
 
-## Preview Compose Setup (MANDATORY)
+## Project: Titanic Survivors
+Stack: **Proposed Architecture - brief summary**
 
-During setup, create or update the project-root `docker-compose.dev.yml` (or project-root `docker-compose.yml` if that is the project's canonical compose file) with one app service per deployable/hostable container. Omit externally managed infrastructure services unless the project intentionally owns them. Component-local compose files may exist for documentation, but they are not the preview source of truth. Never leave a root compose file with `services: {}` when the project has hostable components.
+Titanic Survivors Web App
 
-For each deployable service, define:
-- service key/name
-- `build.context` and `build.dockerfile` pointing at the service runtime Dockerfile
-- container port(s) via `ports` or `expose`
-- startup `command`
-- optional `x-install-command` when dependencies baked into `/deps` must be linked or exposed in the live workspace
+Adds a browser UI and a thin prediction API around the existing titanic_survival_predictor training pipeline so users can enter passenger details on a website and receive a survival/death result with themed animations.
 
-Use stable service keys that match the component role, such as `web`, `frontend`, `client`, `ui`, `api`, `backend`, or the component name. The browser-facing service should be named with a frontend/web alias when applicable because preview routing selects the entry service from those names and ports.
+Architecture_components:
 
-Check every compose service against its corresponding runtime Dockerfile (`Dockerfile`, `Dockerfile.dev`, `Dockerfile.prod`, or the Dockerfile referenced by the project). The compose ports, command/entrypoint intent, working directory assumptions, and dependency discovery must match the Dockerfile. If they differ, fix the configuration rather than guessing.
+0. api (fastapi)
 
-# Project: Titanic Survivors
+Programming Language:
+
+python
+
+Technology:
+
+fastapi, uvicorn, pydantic, pandas, numpy, scikit-learn, xgboost, joblib, python-dotenv, orjson, starlette, aiofiles, requests, typing-extensions
+
+Responsibilities:
+
+Exposes an HTTP prediction API that wraps the existing titanic_survival_predictor model. On startup, attempts to load serialized artifacts produced by the existing pipeline from ./artifacts (e.g., ./artifacts/titanic_ensemble.pkl and ./artifacts/feature_pipeline.pkl). If artifacts are missing, optionally invokes the existing titanic_survival_predictor module (as a Python import or subprocess) to run its training routine to generate them, without modifying that code. For request handling, validates incoming passenger fields with Pydantic (fields like Pclass, Sex, Age, SibSp, Parch, Fare, Embarked, Cabin, Ticket, Name if required by the existing feature engineering). To ensure feature parity, first tries to import and call any feature engineering utilities from titanic_survival_predictor (e.g., titanic_survival_predictor.features.transform(df)); if unavailable, falls back to loading a serialized preprocessing pipeline saved by the training run. Applies the ensemble model to the engineered features and returns a JSON response containing: prediction (0/1), probability, and a friendly label ('survived'/'did_not_survive'). Provides endpoints: GET /health (service health), GET /model/info (artifact metadata such as model version timestamp, hash), POST /predict (single passenger), POST /predict/batch (bulk), and POST /model/reload (reload artifacts without restart). Enables CORS for the web component origin so the website can call the API directly. Uses orjson for fast JSON and returns deterministic schemas so the web form can map fields unambiguously.
+
+Rationale:
+
+FastAPI provides a lean, typed, and performant Python API that can co-reside in the same Python environment as titanic_survival_predictor, letting us import its feature engineering or run its training routine. Keeping the prediction adapter in Python avoids cross-language serialization issues with XGBoost/sklearn artifacts. We include both import-and-call and artifact-load paths to integrate cleanly with the existing pipeline regardless of how it currently persists models. The explicit endpoints and CORS configuration make it straightforward for a browser SPA to consume.
+
+1. web (react)
+
+Programming Language:
+
+typescript
+
+Technology:
+
+react, react-dom, axios, zustand, react-hook-form, zod, @hookform/resolvers, lottie-web, clsx
+
+Responsibilities:
+
+Browser SPA that renders a quaint, Titanic-themed form for entering passenger details used by the existing model (Pclass, Sex, Age, SibSp, Parch, Fare, Embarked; optionally Cabin/Ticket if the existing feature engineering expects them). Validates inputs client-side with react-hook-form and zod before sending to the API. Calls the api POST /predict endpoint via axios and displays the prediction: plays a survival animation if predicted to survive, or a death animation otherwise, using lottie-web assets stored under public/animations (e.g., public/animations/survive.json and public/animations/not_survive.json). Provides basic UX flows: reset form, try another passenger, and shows probability/confidence. Includes environment-based configuration (e.g., VITE_API_BASE_URL) to target the api component. Sets CORS-friendly headers only on the client side (actual policy is enforced server-side by api). Ships a minimal Titanic-themed style (colors, typography) with TailwindCSS utility classes.
+
+Rationale:
+
+React with Vite offers a fast, lightweight SPA suitable for a single-page form-and-result workflow. TypeScript ensures typed request/response parity with the API. Lottie provides high-quality, easily swappable animations without heavy assets. Using small libraries (react-hook-form, zod) keeps the codebase simple while delivering robust validation and state management.
 
 
+## What you built
+Feature: API Service Foundation (FastAPI + CORS + Config)
+Workflow: Run API Locally (App Factory Boot + Lifespan) — Developer starts the FastAPI service using the app factory; settings load, logging initializes, middleware/routers/handlers attach, and readiness flips to true.
 
----
+Steps implemented:
+  1. 1) Developer opens terminal and runs `uvicorn api.main:create_app --factory --host 0.0.0.0 --port 8000 --reload` to start the API; feature becomes reachable at http://localhost:8000 [Container: developer shell] Deps: []
+  2. 2) python-dotenv loads .env early; environment variables are read to build effective config (env vars > .env > defaults) [Container: backend/api process] Deps: [1]
+  3. 3) AppSettings(BaseSettings) validates and materializes settings; invalid values raise validation errors; invalid CORS origins are warned and skipped [Container: backend/api process] Deps: [2]
+  4. 4) logging_config.init_logging(settings) configures structured JSON logging and harmonizes uvicorn loggers [Container: backend/api process] Deps: [3]
+  5. 5) FastAPI app is created via create_app(); ORJSONResponse set as default; title/version/docos configured based on ENV [Container: backend/api process] Deps: [4]
+  6. 6) Middleware installed in order: (a) CORS with allow_* from settings, (b) optional request ID placeholder, (c) optional Server-Timing if enabled [Container: backend/api process] Deps: [5]
+  7. 7) Routers included under prefix settings.API_V1_PREFIX: health router mapped to GET /api/v1/health [Container: backend/api process] Deps: [6]
+  8. 8) Exception handlers registered: HTTPException, RequestValidationError, and generic Exception mapped to structured ErrorResponse with ORJSONResponse [Container: backend/api process] Deps: [7]
+  9. 9) Startup event runs: app.state.process_start captured, settings and environment summary logged, readiness flag set true after successful init [Container: backend/api process] Deps: [8]
+  10. 10) Uvicorn server binds HOST:PORT and begins accepting connections [Container: backend/api process] Deps: [9]
 
-# Component: web
+## Your task
 
-**Language:** typescript 20
-**Packages:** react, react-dom, axios, zustand, react-hook-form, zod, @hookform/resolvers, lottie-web, clsx
+1. Identify which files changed in the implementation session.
+2. Identify which components those files belong to (e.g. `backend/`, `frontend/`).
+3. For each changed component call `run_test`:
+   - `root_directory`: the component folder relative to workspace root (e.g. `"backend"`)
+   - `packages_installed`: `true` if dependency manifests changed (requirements.txt, package.json, Pipfile, pyproject.toml, etc.), otherwise `false`
+   - `command`: only set this if you need a narrower test path than the component default
+4. If tests fail, diagnose the root cause, fix the code, then call `run_test` again. Keep iterating until tests pass or you are certain further attempts will not help.
+   If tests cannot run because the test container is missing, incomplete, or wrong, prefer fixing or creating a lightweight `Dockerfile.test`, then rerun `run_test`. Do not delete or replace the project's production `Dockerfile` unless the task is explicitly about production deployment/runtime behavior.
+5. When all tests pass, end your response with exactly: `INTEGRATION TESTS: ALL PASSED`
+6. If you exhaust your attempts without passing, end with: `INTEGRATION TESTS: FAILED` followed by a description of what is still failing and why.
 
----
-
-# Your Task
-
-Scaffold the **web** component from scratch. Work through each phase in order. All work happens inside the `web` folder at the project root. Do NOT install packages directly in the worker workspace; declare runtime, dev, lint, and test dependencies in the component manifest file. Do NOT run the application or tests.
-
-## Phase 1: Environment Setup
-
-1. 1. From the project root, initialize a new Vite React TypeScript application inside the existing web folder using the official template so that the framework scaffolds the base structure (including src, public, index.html, tsconfig.json, vite.config.ts, and a framework-provided .gitignore) within web
-2. 2. From the project root, ensure the web/.gitignore exists and append entries to the end of the file to ignore .claude/ and any local environment or build artifacts not already covered; verify that no rules exclude the web/tests directory so tests remain tracked
-3. 3. From the project root, add a .dockerignore file inside web that excludes build context noise, including node_modules, dist, coverage, .git, .github, .vscode, .idea, .DS_Store, npm and pnpm caches, and the tests directory; ensure the .dockerignore excludes tests to keep images lean while keeping tests tracked in git
-4. 4. From the project root, open the web/package.json created by the framework and add the following runtime dependencies without specifying versions so the latest releases are required: axios, zustand, react-hook-form, zod, @hookform/resolvers, lottie-web, and clsx, preserving the dependencies already added by the template
-5. 5. From the project root, in web/package.json add development-time linting and formatting support without versions by including the following as devDependencies: eslint, @typescript-eslint/parser, @typescript-eslint/eslint-plugin, eslint-plugin-react, eslint-plugin-react-hooks, eslint-plugin-import, eslint-config-prettier, and prettier
-6. 6. From the project root, in web/package.json define scripts for project tasks without invoking any commands now: keep the framework-provided dev, build, and preview scripts as-is; add lint to run ESLint over .ts and .tsx sources; add format to run Prettier write over relevant files; and add typecheck to run the TypeScript compiler in noEmit mode
-7. 7. From the project root, create an ESLint configuration file web/.eslintrc.cjs that enables TypeScript and React linting with sensible defaults: set parser to @typescript-eslint/parser, include plugins @typescript-eslint, react, react-hooks, and import, set env for browser and es2022, extend recommended configs from eslint, @typescript-eslint, plugin:react/recommended, plugin:react-hooks/recommended, plugin:import/recommended, and prettier, configure parserOptions to reference the web/tsconfig.json, add settings to detect the React version automatically, and enable simple import ordering and unused variable rules that ignore variables prefixed with an underscore
-8. 8. From the project root, add a Prettier configuration file web/.prettierrc.json that standardizes formatting (for example: printWidth 100, singleQuote true, trailingComma all, semi true, and bracketSpacing true) and create a web/.prettierignore that excludes dist, coverage, and node_modules
-9. 9. From the project root, add a .env file inside web to centralize configuration for local development and previews: include VITE_APP_NAME=Titanic Survivors, VITE_API_BASE_URL=https://api.example.local, VITE_ENABLE_MOCKS=false, and VITE_ALLOWED_HOST_SUFFIX=.appbuilder.127.0.0.1.nip.io as temporary dummy values; do not commit any sensitive data
-10. 10. From the project root, open web/vite.config.ts and augment the configuration to support preview environments safely: import loadEnv and read the VITE_ALLOWED_HOST_SUFFIX from process.env; in the server configuration set host to true, set strictPort to true, and set allowedHosts to an array including the suffix value (for example ['.appbuilder.127.0.0.1.nip.io']) so wildcard subdomains of the preview base domain are permitted without disabling host checks; leave other defaults intact
-11. 11. From the project root, create the following folders inside web/src to establish a modular structure without altering any framework-generated files: src/components for UI components, src/pages for routed pages if needed, src/store for Zustand stores, src/services for API and data access, src/lib for utilities, src/styles for global styles, and src/assets/animations for Lottie JSON files
-12. 12. From the project root, add a new file web/src/store/appStore.ts that initializes a small Zustand store (for example, app title, loading flag, and an action to toggle loading) to validate state management is wired up without interfering with the template
-13. 13. From the project root, add a new file web/src/services/http.ts that exports an Axios instance preconfigured to read the baseURL from import.meta.env.VITE_API_BASE_URL and sets sensible defaults (JSON headers and a short timeout) to centralize HTTP calls
-14. 14. From the project root, add a new file web/src/lib/form.ts that re-exports helpers to integrate react-hook-form and zod (for example, typed schema resolver usage) so forms are consistent across the app
-15. 15. From the project root, add a new stylesheet web/src/styles/globals.css if the template did not already include global styles, and ensure web/src/main.tsx or the framework’s main entry imports this stylesheet so basic global styling is applied
-16. 16. From the project root, add a basic Lottie usage placeholder file web/src/components/LottiePlayer.tsx that imports lottie-web lazily and renders an animation container which loads any JSON animation placed in src/assets/animations, ensuring the component does not execute in non-browser contexts
-17. 17. From the project root, ensure TypeScript configuration in web/tsconfig.json includes paths for clean imports: set baseUrl to ./src and add a paths alias like @/* to map to src/*; then in web/vite.config.ts add a corresponding resolve.alias entry mapping '@' to fileURLToPath(new URL('src', import.meta.url)) so imports like '@/services/http' work consistently
-18. 18. From the project root, add a README.md inside web describing how the component is structured, how environment variables are consumed (noting that they must be prefixed with VITE_), and summarizing available npm scripts including lint, format, and typecheck; avoid any run or install instructions at this time
-19. 19. From the project root, create a Dockerfile inside web that uses Node 20 as the single base image, sets WORKDIR to /app, copies only package.json and the lockfile first, runs a non-interactive, frozen install to populate node_modules for builds, copies the remaining project files, sets NODE_ENV to production by default, and declares the default command as the framework’s production preview command placeholder without actually executing it now
-20. 20. From the project root, create a Dockerfile.installer inside web dedicated to generating the lockfile non-interactively: use the same Node 20 base image, set WORKDIR to /app, copy only package.json into the image, execute the package manager’s lockfile-only operation to produce package-lock.json without installing packages, and set the container to exit successfully after writing the lockfile so other services can reuse it for reproducible builds
-21. 21. From the project root, ensure the chosen package manager in web/package.json is npm (default for Vite) to provide dependency isolation via package.json plus package-lock.json; do not introduce additional workspace or multi-tool managers so isolation is handled by a single manifest and lockfile
-22. 22. From the project root, verify that no files or configurations were added or modified under web/tests so test setup remains untouched for a separate task, and confirm that .gitignore does not exclude the tests directory
-23. 23. From the project root, record the exact Node language version used across Dockerfile and Dockerfile.installer as 20 and ensure this version is consistently referenced anywhere the runtime is mentioned so development, preview, and build containers match
-24. Step 23: Deduce the app’s entry point path from the architecture_context and pass it to inject_script_into_entry_point to inject the script.
-25. Step 24: Create a Dockerfile.dev for preview hot reload. It must: (1) install dependencies into /deps (NOT into the source mount); (2) set WORKDIR to /workspace/repo/web; (3) at container startup, link deps into the workspace if the framework resolves modules locally — for Node.js use an entrypoint or CMD prefix: `ln -sf /deps/node_modules ./node_modules`; (4) EXPOSE the correct dev server port for the framework — Vite: 5173, Next.js/React CRA/Express: 3000, Expo webpack: 19006 — do NOT guess 3000 for Expo; (5) run the dev server bound to 0.0.0.0 — for Expo webpack use `npx expo start --web --host 0.0.0.0` with NO --port flag and NO EXPO_WEBPACK_PORT env var (webpack always binds 19006 by default); (6) set ENV CHOKIDAR_USEPOLLING=true for polling-based hot reload inside the container; (7) do NOT COPY source code — source mounts from the preview PVC at /workspace/repo/web. Also create or update the project-root docker-compose.dev.yml: add a service entry for `web` using this exact structure. Do not create only a component-local compose file, and do not leave the root compose as `services: {}` when this hostable component exists:
-   services:
-     <service-name>:
-       build:
-         context: ./<component-name>
-         dockerfile: Dockerfile.dev
-       ports:
-         - "<exposed-port>:<exposed-port>"
-       expose:
-         - <exposed-port>
-       command: <startup-command-list-or-string>
-       x-install-command: <dependency-linking-command-list-or-string>
-Use a stable frontend service key such as `web`, `frontend`, `client`, or the component name when this is browser-facing. Verify the compose service key, port(s), command, working directory assumptions, and x-install-command match the Dockerfile.dev you created for `web`.
-26. Step 25: Update the frontend dev server configuration to enable external host access from http://appbuilder-appbuilder-frontend.default.svc.cluster.local:5173, set the desired port, configure HMR with the appropriate protocol and client port, and whitelist allowed hosts for cross-origin connections.
-27. Step 26: Pass the filepath of index.html into the inject_script_into_index_html tool to inject the script into the index.html file to enable preview url changes.
-28. Step 27: Configure Playwright E2E testing in web. Do NOT modify any existing framework or TypeScript config files (e.g. vite.config.ts, next.config.js, tsconfig.json). Instead, create a test-only config file (e.g. vite.playwright.config.ts or equivalent) that extends the existing base framework config and overrides only the settings needed for testing — at minimum, open up the allowed-hosts restriction so Playwright's Chromium can connect to the dev server. Create `e2e/global-setup.ts` that starts the dev server programmatically using the framework's JavaScript API (e.g. Vite's `createServer` from 'vite', or the equivalent for the framework in use), pointing it at the test-only config. Call the server's listen method and store the running instance on a global so teardown can reach it. Create `e2e/global-teardown.ts` that retrieves the stored server instance and closes it. Ensure `playwright.config.ts` sets `globalSetup` and `globalTeardown` to these two files, sets `use.baseURL` to the local dev server URL, and does NOT include a `webServer` config block. The server must be started programmatically so Chromium and the dev server share the same process group — this is required for Chrome to reach the dev server in this environment; a subprocess-based webServer will not work.
-
-## Phase 2: Test Environment Setup
-
-1. Inside web, create or update package.json to declare Node.js 20 compatibility, enable ESM, and isolate test dependencies. Include: name "titanic-web", private true, type "module", engines.node ">=20", scripts with: "test": "vitest run --reporter=default --silent=false", and devDependencies: vitest, typescript, and @types/node. This establishes a single npm-based dependency context and a non-interactive test runner entrypoint.
-2. Inside web, create tsconfig.json to compile and type-check the project and tests under Node.js 20 with modern module resolution. Set compilerOptions: target "ES2020", lib ["ES2020"], module "NodeNext", moduleResolution "NodeNext", strict true, esModuleInterop true, resolveJsonModule true, skipLibCheck true, isolatedModules true, types ["node", "vitest"]; and include ["src", "tests", "vitest.config.ts"]. This ensures Vitest can transpile TypeScript via esbuild consistently.
-3. Inside web, create vitest.config.ts to fully configure the test framework in CI mode. Export defineConfig with: test.environment set to "node" (no browser needed), test.include ["tests/**/*.test.ts"], test.setupFiles ["./tests/setup.ts"], and clearSnapshotWarning true. This pins the runner to node, ensures setup runs before all tests, and discovers only our intended files.
-4. Inside web, create tests/setup.ts to guarantee clean state after each test and to provide lightweight stubs for any accidental external imports without installing them. Import { afterEach, vi } from "vitest"; call afterEach(() => { vi.clearAllMocks(); vi.resetModules(); vi.unstubAllGlobals?.(); }); Optionally define no-op vi.mocks for packages react, react-dom, axios, zustand, react-hook-form, zod, @hookform/resolvers, lottie-web, and clsx that return minimal objects or empty functions. This prevents the test environment from executing production code paths and enforces cleanup.
-5. Inside web, create tests/testWrapperTimeout.ts exporting a reusable function named testWrapperTimeout that enforces a default 10-second limit per test and throws a detailed error if exceeded. Implement as: export function testWrapperTimeout(fn: () => unknown | Promise<unknown>, timeoutMs = 10000) { return async function wrapped(this: unknown, ...args: unknown[]) { const testName = (wrapped as any).testName || "(unnamed test)"; const fileHint = new Error().stack?.split("\n").find(l => l.includes("tests/")) || "(file: unknown)"; let timer: NodeJS.Timeout; try { await Promise.race([ Promise.resolve(fn.apply(this, args)), new Promise((_, reject) => { timer = setTimeout(() => { const message = `Test timed out after ${timeoutMs}ms: ${testName} at ${fileHint}`; reject(new Error(message)); }, timeoutMs); }) ]); } finally { if (timer) clearTimeout(timer); } }; } This wrapper returns an async function that races the test body against a timer and composes an error including the test name and the callsite path.
-6. Inside web, ensure all tests use the wrapper by providing a tiny deterministic project function and a smoke test that invokes it through testWrapperTimeout. Create src/utils/add.ts with: export function add(a: number, b: number) { return a + b; } This is a minimal, deterministic function that exercises project-owned code.
-7. Inside web, create tests/unit/smoke.test.ts that imports the wrapper and the add function, and defines a passing test. Example: import { describe, it, expect } from "vitest"; import { add } from "../../src/utils/add"; import { testWrapperTimeout } from "../testWrapperTimeout"; const run = testWrapperTimeout(async () => { const result = add(2, 3); expect(result).toBe(5); }); (run as any).testName = "adds two numbers"; describe("smoke", () => { it("adds two numbers", run); }); This confirms the runner executes TS, imports project code, and applies the timeout wrapper.
-8. Inside web, create a .env.test file to define test-only environment variables without prompting the user. Include: NODE_ENV=test and LOG_LEVEL=warn. This ensures deterministic behavior in CI and prevents noisy logs.
-9. Inside web, create Dockerfile.test using the Node.js 20 base image, setting WORKDIR to /app, installing only declared dependencies, and copying only the files required by tests. Use: FROM node:20; WORKDIR /app; COPY package.json package-lock.json* ./; RUN npm install --no-fund --no-audit; COPY tsconfig.json ./; COPY vitest.config.ts ./; COPY .env.test ./; COPY src/ ./src/; COPY tests/ ./tests/; CMD ["npm","run","test"]; This keeps the image lean and reproducible without copying unrelated artefacts.
-10. Inside web, create Dockerfile.test.dockerignore to exclude heavy or binary artefacts while keeping tests. Include: *.pkl, *.pickle, *.h5, *.pt, *.pth, *.bin, *.npy, *.npz, *.joblib, *.ckpt, *.model, *.safetensors, *.onnx, data/, models/, outputs/, results/, checkpoints/. Do not list tests/ so that unit and integration tests remain available in the build context.
-11. Inside web, ensure package.json contains only the testing devDependencies added earlier and does not introduce unrelated tooling. The production dependencies (react, react-dom, axios, zustand, react-hook-form, zod, @hookform/resolvers, lottie-web, clsx) remain as regular dependencies but are not required to run the dummy test because imports are mocked in setup. This satisfies the constraint to avoid installing and executing packages unless their functions are explicitly exercised by a test.
-12. Inside web, document in package.json the intended CI usage by adding the npm script "posttest": "true" so no interactive post-run steps occur, and ensure the test script uses vitest run (non-watch) to be fully non-interactive. This guarantees batch-mode execution suitable for CI pipelines.
+Use `run_test` only — do not run test commands directly in bash. The test runner provisions a Kubernetes pod with the correct environment.

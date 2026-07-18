@@ -1,7 +1,7 @@
 """Request/response models for the API endpoints (Pydantic v2)."""
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -36,3 +36,15 @@ class HealthResponse(BaseModel):
 
 class ReadyResponse(BaseModel):
     status: str = "ready"
+
+
+class ServiceHealthResponse(BaseModel):
+    """Response body for the foundation ``GET {API_V1_PREFIX}/health`` probe."""
+
+    status: Literal["ok"] = "ok"
+    service: str
+    env: str
+    time: str
+    version: str
+    uptime_ms: float
+    dependencies: dict[str, Any] = Field(default_factory=dict)

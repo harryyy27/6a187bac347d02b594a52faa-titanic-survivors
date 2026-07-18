@@ -13,20 +13,40 @@ timeout, preventing a hung test from stalling the whole suite.
 
 ## Environment isolation
 
-- `.env.test` supplies safe, predictable defaults for test runs (`ENV`,
-  `LOG_LEVEL`, `PORT`) so tests never depend on a developer's local
-  environment.
+- `.env.test` documents safe, predictable defaults (`ENV`, `LOG_LEVEL`,
+  `PORT`) for test runs. Nothing loads it automatically today (it is copied
+  into the test image but not sourced as `.env`), so `app.core.config`
+  falls back to its own field defaults unless the harness injects these as
+  real process environment variables; `AppSettings.env`'s validator accepts
+  both `dev/staging/prod` and `test/testing` for this reason.
 - `tests/conftest.py` provides an autouse fixture that snapshots
   `os.environ` before each test and restores it afterward, so no test can
   leak environment mutations into another.
-- The same `conftest.py` also installs lightweight stub modules for heavy
-  production packages (fastapi, pandas, xgboost, ...) into `sys.modules`
-  so incidental import resolution stays fast without those packages being
-  installed in the test image.
 
-## Dependency isolation
+## Dependency isolation and stubbing scope
 
-Test-time dependencies are restricted to exactly what is declared in
-`requirements-test.txt` (currently just `pytest`) to keep the test image
-minimal. Do not add a production package to this file unless a test
+Test-time dependencies are restricted to exactly what `requirements-test.txt`
+declares: `pytest`, plus the web framework itself (`fastapi`, `starlette`,
+`pydantic`, `python-dotenv`, `orjson`, `uvicorn`) and HTTP test clients
+(`httpx`, `requests`). These are installed for real because the "API
+Service Foundation" tests exercise our own config/logging/error/routing
+code running *on top of* that framework -- they are not asserting on
+fastapi/pydantic's own behaviour, they are asserting on what our app does
+with it (response schemas, CORS headers, error payloads).
+
+Heavy, unrelated production packages used only by the pre-existing predict
+feature (`pandas`, `numpy`, `scikit-learn`, `xgboost`, `joblib`,
+`aiofiles`) are **not** installed here, because no test in this suite calls
+their functions in an assertion. Importing `app.main` still transitively
+imports them (via `app.api.routes` / `app.ml.model`), so
+`tests/integration/conftest.py` provides a `stub_unused_ml_dependencies`
+fixture that installs empty stand-in modules into `sys.modules` via
+`monkeypatch` (auto-restored after each test). It is scoped to
+`tests/integration/` only (a directory-scoped `conftest.py`, pytest's
+built-in scoping mechanism) -- `tests/unit/` never needs it and never sees
+it. Tests that request this fixture must import `app.main` (and anything
+that transitively imports it) *inside* the test/fixture body, after the
+fixture has patched `sys.modules`, not at module import time.
+
+Do not add a production package to `requirements-test.txt` unless a test
 directly imports and asserts against it -- stub it instead.

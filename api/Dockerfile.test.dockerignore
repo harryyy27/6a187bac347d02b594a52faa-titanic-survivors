@@ -1,3 +1,33 @@
+# Per-Dockerfile ignore file for Dockerfile.test.
+#
+# Unlike api/.dockerignore (used by the production Dockerfile, which never
+# copies tests/ or .env.test), this file must NOT exclude tests/, app/, or
+# .env.test -- Dockerfile.test explicitly COPYs those. It only excludes
+# caches, editor cruft, and binary/model artefacts so the test image stays
+# small.
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+*.pyo
+.mypy_cache
+.pytest_cache
+.ruff_cache
+.DS_Store
+.idea
+.vscode
+dist
+build
+.coverage
+htmlcov
+.claude
+notebooks/
+data/
+models/
+outputs/
+results/
+checkpoints/
 *.pkl
 *.pickle
 *.h5
@@ -11,8 +41,9 @@
 *.model
 *.safetensors
 *.onnx
-data/
-models/
-outputs/
-results/
-checkpoints/
+# Never bake real developer secrets into the test image; .env.test (safe,
+# checked-in test defaults) is copied explicitly and is not matched by this.
+.env
+.env.local
+.env.development.local
+.env.production.local
