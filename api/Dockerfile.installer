@@ -1,0 +1,17 @@
+# installer service: produces a reproducible poetry.lock artifact from the
+# pyproject.toml manifest. Does not install any dependencies -- lock
+# resolution only.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+ENV POETRY_HOME=/opt/poetry \
+    PATH="/opt/poetry/bin:${PATH}"
+
+RUN pip install --no-cache-dir poetry
+
+COPY pyproject.toml ./pyproject.toml
+
+RUN poetry lock --no-interaction
+
+CMD ["cat", "poetry.lock"]

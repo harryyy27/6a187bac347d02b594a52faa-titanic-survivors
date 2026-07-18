@@ -1,0 +1,30 @@
+# Dev/preview image for the api component.
+#
+# Source is mounted dynamically via a Kubernetes PVC at /workspace/repo/api
+# at runtime, so no application source is copied here. Dependencies are
+# baked into /deps/venv (a path outside the mount) so they survive the
+# mount shadowing anything the image wrote under /workspace. Runs uvicorn
+# with --reload against the live mounted source for hot-reload preview.
+FROM python:3.11-slim
+
+WORKDIR /tmp/build
+
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && python -m venv /deps/venv \
+    && /deps/venv/bin/pip install --no-cache-dir poetry
+
+# Copy only the dependency manifests to resolve/install into /deps/venv.
+COPY pyproject.toml poetry.lock* ./
+
+RUN /deps/venv/bin/poetry config virtualenvs.create false \
+    && /deps/venv/bin/poetry install --no-root --no-interaction
+
+ENV PATH="/deps/venv/bin:${PATH}" \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /workspace/repo/api
+
+EXPOSE 8000
+
+# No source copied: /workspace/repo/api is populated by the runtime PVC mount.
+CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000} --reload --reload-dir /workspace/repo/api"]

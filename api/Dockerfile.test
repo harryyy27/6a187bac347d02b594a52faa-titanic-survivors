@@ -1,0 +1,28 @@
+# Minimal test image for the api component.
+#
+# Runs only the harness/smoke test suite against project-owned code
+# (tiny_math.add) using the reusable testWrapperTimeout decorator. Heavy
+# production packages (fastapi, pandas, xgboost, ...) are not installed
+# here -- they are stubbed in tests/conftest.py -- because the current
+# test suite does not import or assert against them.
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Validate the test dependency manifest before installing anything from it.
+COPY requirements-test.txt ./requirements-test.txt
+RUN python -m pip install --no-cache-dir --upgrade pip \
+    && pip install --dry-run --no-cache-dir -r requirements-test.txt \
+    && pip install --no-cache-dir -r requirements-test.txt
+
+# Copy only the explicitly required files -- never the whole build context.
+COPY pytest.ini ./pytest.ini
+COPY .env.test ./.env.test
+COPY tiny_math.py ./tiny_math.py
+COPY tests/ ./tests/
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PATH="/usr/local/bin:${PATH}"
+
+CMD ["pytest", "tests/", "-v"]
