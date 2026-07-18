@@ -157,5 +157,56 @@
     },
     "artifact_uri": "evals/titanic_survival_predictor/artifacts",
     "completed_at": null
+  },
+  {
+    "run_index": 6,
+    "run_type": "experiment",
+    "status": "completed",
+    "hyperparameters": {
+      "max_depth": 6,
+      "objective": "binary:logistic",
+      "eta": 0.08,
+      "min_child_weight": 3,
+      "gamma": 2,
+      "alpha": 0.6,
+      "eval_metric": "error",
+      "colsample_bytree": 0.7,
+      "subsample": 0.85,
+      "k": 4,
+      "num_round": 80,
+      "early_stopping_rounds": 15
+    },
+    "changed_dimensions": [
+      "hyperparameters.alpha",
+      "hyperparameters.colsample_bytree",
+      "hyperparameters.early_stopping_rounds",
+      "hyperparameters.eta",
+      "hyperparameters.gamma",
+      "hyperparameters.max_depth",
+      "hyperparameters.min_child_weight",
+      "hyperparameters.num_round",
+      "hyperparameters.subsample",
+      "runtime_parameters.alpha",
+      "runtime_parameters.colsample_bytree",
+      "runtime_parameters.early_stopping_rounds",
+      "runtime_parameters.eta",
+      "runtime_parameters.gamma",
+      "runtime_parameters.k",
+      "runtime_parameters.max_depth",
+      "runtime_parameters.min_child_weight",
+      "runtime_parameters.num_round",
+      "runtime_parameters.subsample"
+    ],
+    "primary_metric": {
+      "name": "accuracy",
+      "direction": "maximize"
+    },
+    "primary_metric_value": 0.8148148148148148,
+    "metrics": {
+      "accuracy": 0.8148148148148148,
+      "mean_cv_error": 0.25
+    },
+    "artifact_uri": "evals/titanic_survival_predictor/artifacts",
+    "completed_at": null
   }
 ]

@@ -49,8 +49,6 @@ or hand off to a tool such as `run_test`, `request_human_input`, or `run_remote_
 
 ## Remote Container Eval Execution & ML Training (MANDATORY GUIDELINES)
 - **Active Mode:** optimize (Max Iterations: 3)
-- **User Tweak / Experimentation Guidance:** Optimise for accuracy. Feature selection, feature engineering and hyperparameter optimisation
-
 
 ## Active Optimization History
 The target metric is: **accuracy** (maximize).
@@ -63,6 +61,7 @@ The target metric is: **accuracy** (maximize).
 | #3 | completed | `max_depth=6, objective=binary:logistic, eta=0.125, min_child_weight=1, gamma=1, alpha=0.4, eval_metric=error, colsample_bytree=0.8, k=4, num_round=25, early_stopping_rounds=20` | hyperparameters.max_depth, runtime_parameters.max_depth | {'name': 'accuracy', 'direction': 'maximize'}: **0.8240740740740741** | evals/titanic_survival_predictor/artifacts |
 | #4 | completed | `max_depth=4, objective=binary:logistic, eta=0.125, min_child_weight=1, gamma=0, alpha=0.4, eval_metric=error, colsample_bytree=0.8, k=4, num_round=25, early_stopping_rounds=20` | hyperparameters.gamma, runtime_parameters.gamma | {'name': 'accuracy', 'direction': 'maximize'}: **0.8240740740740741** | evals/titanic_survival_predictor/artifacts |
 | #5 | completed | `max_depth=4, objective=binary:logistic, eta=0.125, min_child_weight=1, gamma=1, alpha=0.4, eval_metric=error, colsample_bytree=0.8, k=4, num_round=60, early_stopping_rounds=20` | hyperparameters.num_round, runtime_parameters.num_round | {'name': 'accuracy', 'direction': 'maximize'}: **0.8240740740740741** | evals/titanic_survival_predictor/artifacts |
+| #6 | completed | `max_depth=6, objective=binary:logistic, eta=0.08, min_child_weight=3, gamma=2, alpha=0.6, eval_metric=error, colsample_bytree=0.7, subsample=0.85, k=4, num_round=80, early_stopping_rounds=15` | hyperparameters.alpha, hyperparameters.colsample_bytree, hyperparameters.early_stopping_rounds, hyperparameters.eta, hyperparameters.gamma, hyperparameters.max_depth, hyperparameters.min_child_weight, hyperparameters.num_round, hyperparameters.subsample, runtime_parameters.alpha, runtime_parameters.colsample_bytree, runtime_parameters.early_stopping_rounds, runtime_parameters.eta, runtime_parameters.gamma, runtime_parameters.k, runtime_parameters.max_depth, runtime_parameters.min_child_weight, runtime_parameters.num_round, runtime_parameters.subsample | {'name': 'accuracy', 'direction': 'maximize'}: **0.8148148148148148** | evals/titanic_survival_predictor/artifacts |
 
 Full history is also available at `evals/history.json` in the workspace, and via the `view_eval_history` MCP tool for the complete configuration/metrics of any past run.
 
