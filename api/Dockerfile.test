@@ -1,10 +1,12 @@
-# Minimal test image for the api component.
+# Test image for the api component.
 #
-# Runs only the harness/smoke test suite against project-owned code
-# (tiny_math.add) using the reusable testWrapperTimeout decorator. Heavy
-# production packages (fastapi, pandas, xgboost, ...) are not installed
-# here -- they are stubbed in tests/conftest.py -- because the current
-# test suite does not import or assert against them.
+# Runs the full unit + integration suite for the "API Service Foundation"
+# feature (config, logging, errors, middleware, app factory, health router)
+# plus the pre-existing harness smoke test. Heavy, unused production
+# packages (pandas, numpy, scikit-learn, xgboost, joblib, aiofiles) are
+# deliberately NOT installed here -- no test in this suite calls their
+# functions in an assertion, so tests/integration/conftest.py stubs them
+# via sys.modules instead. See requirements-test.txt for the installed set.
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -15,10 +17,12 @@ RUN python -m pip install --no-cache-dir --upgrade pip \
     && pip install --dry-run --no-cache-dir -r requirements-test.txt \
     && pip install --no-cache-dir -r requirements-test.txt
 
-# Copy only the explicitly required files -- never the whole build context.
+# Copy only the explicitly required source and test files -- never the
+# whole build context.
 COPY pytest.ini ./pytest.ini
 COPY .env.test ./.env.test
 COPY tiny_math.py ./tiny_math.py
+COPY app/ ./app/
 COPY tests/ ./tests/
 
 ENV PYTHONUNBUFFERED=1 \
