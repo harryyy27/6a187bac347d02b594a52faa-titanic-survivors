@@ -1,47 +1,24 @@
 """Shared pytest fixtures for the api test suite.
 
-Keeps tests hermetic and fast:
-  (a) an autouse fixture snapshots/restores ``os.environ`` around every
-      test so no test can leak environment mutations into another;
-  (b) lightweight stub modules are installed into ``sys.modules`` for the
-      heavy, unused production packages so incidental import resolution
-      (e.g. accidental collection of app modules) stays fast without
-      those packages being installed in the test image;
-  (c) no fixture performs I/O outside the working directory.
+Keeps tests hermetic and fast: an autouse fixture snapshots/restores
+``os.environ`` around every test so no test can leak environment mutations
+into another.
+
+Stubbing of heavy, unused third-party packages (pandas, numpy, sklearn,
+xgboost, joblib, aiofiles) is intentionally *not* done here. A global,
+session-scoped, autouse stub would bleed into every test file in this
+process regardless of whether it needs the stub, which is exactly the
+anti-pattern the project's testing rules warn against. Instead, only the
+test files that actually need to import the full ``app.main`` graph (and
+therefore transitively import those unused heavy packages) install scoped
+stubs via ``monkeypatch`` -- see ``tests/integration/conftest.py``.
 """
 from __future__ import annotations
 
 import os
-import sys
-import types
 from collections.abc import Iterator
 
 import pytest
-
-_STUB_MODULE_NAMES = [
-    "fastapi",
-    "uvicorn",
-    "pydantic",
-    "pandas",
-    "numpy",
-    "sklearn",
-    "xgboost",
-    "joblib",
-    "python_dotenv",
-    "dotenv",
-    "orjson",
-    "starlette",
-    "aiofiles",
-    "requests",
-    "typing_extensions",
-]
-
-
-def _install_stub_modules() -> None:
-    for module_name in _STUB_MODULE_NAMES:
-        if module_name in sys.modules:
-            continue
-        sys.modules[module_name] = types.ModuleType(module_name)
 
 
 @pytest.fixture(autouse=True)
@@ -53,10 +30,3 @@ def _snapshot_environ() -> Iterator[None]:
     finally:
         os.environ.clear()
         os.environ.update(before)
-
-
-@pytest.fixture(autouse=True, scope="session")
-def _stub_heavy_dependencies() -> Iterator[None]:
-    """Insert lightweight stand-ins for heavy production packages."""
-    _install_stub_modules()
-    yield
