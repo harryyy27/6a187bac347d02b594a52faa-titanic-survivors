@@ -13,6 +13,7 @@
     "lint": "eslint \"src/**/*.{ts,tsx}\"",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"tests/**/*.ts\"",
     "typecheck": "tsc --noEmit",
+    "pretest": "sh -c 'if [ -d /app/node_modules ] && [ ! -e ./node_modules ]; then ln -sf /app/node_modules ./node_modules; fi'",
     "test": "vitest run --reporter=default --silent=false",
     "posttest": "true",
     "test:e2e": "playwright test"

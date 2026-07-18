@@ -22,9 +22,17 @@ COPY .env.test ./
 COPY src/ ./src/
 COPY tests/ ./tests/
 
-# run_test overrides CMD directly, bypassing any startup symlink step, so
-# make the preinstalled packages discoverable via PATH regardless of the
-# command that is ultimately invoked.
+# run_test overrides CMD directly (and re-clones/runs the test command
+# against a live checkout at /workspace/repo/web rather than this image's
+# /app), bypassing any startup symlink step here. Two safety nets make the
+# packages baked into /app/node_modules discoverable regardless of where
+# the command actually executes from:
+#   1. PATH includes /app/node_modules/.bin for direct binary invocation.
+#   2. package.json's "pretest" script symlinks /app/node_modules into the
+#      current working directory (only when it exists and nothing is
+#      already there), so Node's ESM resolver -- which does not honor
+#      NODE_PATH -- can still find packages like `vitest/config` when
+#      vitest.config.ts is loaded from the live checkout.
 ENV PATH="/app/node_modules/.bin:${PATH}" \
     NODE_ENV=test
 
