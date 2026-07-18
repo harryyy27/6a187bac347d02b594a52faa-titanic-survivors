@@ -72,3 +72,9 @@ def testWrapperTimeout(func: F | None = None, *, timeout: float = DEFAULT_TIMEOU
         return _make_wrapper(inner_func, timeout)
 
     return decorator
+
+
+# Its name matches pytest's default `test*` discovery pattern, so importing
+# it into a test module would otherwise make pytest collect the decorator
+# itself as a bogus test item. Mark it explicitly as not a test.
+testWrapperTimeout.__test__ = False  # type: ignore[attr-defined]
