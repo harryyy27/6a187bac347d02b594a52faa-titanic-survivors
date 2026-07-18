@@ -1,5 +1,5 @@
 # Production image for the Titanic Survivors web SPA.
-FROM node:20
+FROM node:20-slim
 
 WORKDIR /app
 

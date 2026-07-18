@@ -9,7 +9,7 @@
 # live workspace so Node's module resolution finds them relative to
 # the mounted source. Runs the Vite dev server with hot reload against
 # the live mounted source.
-FROM node:20
+FROM node:20-slim
 
 WORKDIR /tmp/build
 

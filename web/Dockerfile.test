@@ -6,7 +6,7 @@
 # zustand, ...) are not required by this suite since tests/setup.ts
 # stubs/cleans up before any accidental import, so they are declared
 # in package.json but not exercised here.
-FROM node:20
+FROM node:20-slim
 
 WORKDIR /app
 
