@@ -116,9 +116,50 @@ def test_run_produces_well_formed_result_record(monkeypatch, tmp_path, fake_tita
     assert len(fake_titanic_dispatch["train_xgb_ensemble"]) == 1
     assert fake_titanic_dispatch["train_xgb_ensemble"][0]["k"] == 2
     assert fake_titanic_dispatch["train_xgb_ensemble"][0]["num_round"] == 3
+    # Default (no overridden hyperparameters given) -> empty override dict,
+    # and the default early_stopping_rounds (20) flows through unchanged.
+    assert fake_titanic_dispatch["train_xgb_ensemble"][0]["hyperparameter_overrides"] == {}
+    assert fake_titanic_dispatch["train_xgb_ensemble"][0]["early_stopping_rounds"] == 20
 
     # Must be JSON-serializable, per the eval contract.
     json.dumps(result)
+
+
+def test_run_forwards_hyperparameter_overrides_and_early_stopping_rounds(
+    monkeypatch, tmp_path, fake_titanic_dispatch
+):
+    """Regression test for a wiring bug: EVAL_PARAMETERS_JSON hyperparameter
+    overrides (e.g. max_depth, gamma) and early_stopping_rounds must actually
+    reach titanic.train_xgb_ensemble / titanic.xgb_params -- previously only
+    k and num_round were wired through, so experiments that only changed
+    e.g. max_depth or gamma silently trained with the hardcoded defaults."""
+    monkeypatch.setattr(run_eval, "ARTIFACT_DIR", str(tmp_path / "artifacts"))
+    monkeypatch.setattr(run_eval, "RESULTS_JSON_PATH", str(tmp_path / "eval_results.json"))
+
+    result = run_eval.run(
+        {
+            "train_per_combo": 2,
+            "holdout_per_combo": 1,
+            "k": 2,
+            "num_round": 3,
+            "max_depth": 6,
+            "gamma": 2,
+            "subsample": 0.85,
+            "early_stopping_rounds": 15,
+        }
+    )
+
+    call = fake_titanic_dispatch["train_xgb_ensemble"][0]
+    assert call["early_stopping_rounds"] == 15
+    assert call["hyperparameter_overrides"] == {"max_depth": 6, "gamma": 2, "subsample": 0.85}
+
+    # The recorded run-record hyperparameters must reflect the *effective*
+    # (overridden) values, not the hardcoded defaults, so the dashboard shows
+    # what was actually trained with.
+    assert result["hyperparameters"]["max_depth"] == 6
+    assert result["hyperparameters"]["gamma"] == 2
+    assert result["hyperparameters"]["subsample"] == 0.85
+    assert result["hyperparameters"]["early_stopping_rounds"] == 15
 
 
 def test_main_emits_training_results_line(monkeypatch, tmp_path, fake_titanic_dispatch, capsys):

@@ -47,6 +47,21 @@ DEFAULT_HOLDOUT_PER_COMBO = 3
 DEFAULT_K = 4
 DEFAULT_NUM_ROUND = 25
 
+# xgb_params() keys (plus "subsample", not in the default dict) that a caller
+# may override via EVAL_PARAMETERS_JSON. Only keys actually present in
+# `params` are forwarded, so unrelated overrides don't leak in.
+HYPERPARAMETER_OVERRIDE_KEYS = (
+    "max_depth",
+    "objective",
+    "eta",
+    "min_child_weight",
+    "gamma",
+    "alpha",
+    "eval_metric",
+    "colsample_bytree",
+    "subsample",
+)
+
 RESULTS_JSON_PATH = os.path.join(_THIS_DIR, "eval_results.json")
 ARTIFACT_DIR = os.path.join(_THIS_DIR, "artifacts")
 
@@ -193,6 +208,9 @@ def run(params: dict) -> dict:
     k = int(params.get("k", DEFAULT_K))
     num_round = int(params.get("num_round", DEFAULT_NUM_ROUND))
     early_stopping_rounds = int(params.get("early_stopping_rounds", 20))
+    hyperparameter_overrides = {
+        key: params[key] for key in HYPERPARAMETER_OVERRIDE_KEYS if key in params
+    }
 
     os.makedirs(ARTIFACT_DIR, exist_ok=True)
 
@@ -208,7 +226,13 @@ def run(params: dict) -> dict:
     train_x = train_proc.drop(["Survived"], axis=1).to_numpy()
 
     ensemble = titanic.train_xgb_ensemble(
-        train_x, train_y, k=k, num_round=num_round, model_dir=ARTIFACT_DIR
+        train_x,
+        train_y,
+        k=k,
+        num_round=num_round,
+        model_dir=ARTIFACT_DIR,
+        early_stopping_rounds=early_stopping_rounds,
+        hyperparameter_overrides=hyperparameter_overrides,
     )
 
     passenger_id = holdout_proc["PassengerId"]
@@ -227,7 +251,7 @@ def run(params: dict) -> dict:
 
     duration = time.time() - start
 
-    model_hyperparameters = dict(titanic.xgb_params())
+    model_hyperparameters = dict(titanic.xgb_params(hyperparameter_overrides))
     model_hyperparameters.update(
         {
             "k": k,
@@ -264,6 +288,8 @@ def run(params: dict) -> dict:
                 "extract_title",
                 "consolidate_rare_titles",
                 "fix_zero_fares",
+                "add_fare_per_person",
+                "add_age_class_interaction",
                 "scale_fare",
                 "scale_age",
                 "encode_categoricals",

@@ -96,6 +96,32 @@ def fix_zero_fares(train, test):
     return train, test
 
 
+def add_fare_per_person(df):
+    """Add Fare_Per_Person = Fare / (Family_Size + 1).
+
+    Normalizes a (possibly shared/group) ticket fare down to an individual
+    level, which is a stronger, less class-confounded signal than raw Fare
+    alone. Must run after ``fix_zero_fares`` (so zero fares are already
+    repaired) and after ``add_family_features`` (so Family_Size exists), and
+    before ``scale_fare`` (which log-transforms/standardizes Fare in place).
+    """
+    df = df.copy()
+    df["Fare_Per_Person"] = df["Fare"] / (df["Family_Size"] + 1)
+    return df
+
+
+def add_age_class_interaction(df):
+    """Add Age_Class = Age * Pclass, a classic Titanic interaction feature.
+
+    Captures that age matters differently by class (e.g. children in
+    lower classes were treated differently from children in first class).
+    Must run on the raw (unscaled) Age column, i.e. before ``scale_age``.
+    """
+    df = df.copy()
+    df["Age_Class"] = df["Age"] * df["Pclass"]
+    return df
+
+
 def scale_fare(train, test):
     """Log-transform and standardize the Fare column using train statistics."""
     train = train.copy()
@@ -144,6 +170,10 @@ def prepare_features(train, test):
     train = consolidate_rare_titles(train)
     test = consolidate_rare_titles(test)
     train, test = fix_zero_fares(train, test)
+    train = add_fare_per_person(train)
+    test = add_fare_per_person(test)
+    train = add_age_class_interaction(train)
+    test = add_age_class_interaction(test)
     train, test = scale_fare(train, test)
     train, test = scale_age(train, test)
     train, test = encode_categoricals(train, test)
@@ -161,9 +191,14 @@ def build_keras_model(input_dim: int):
     return model
 
 
-def xgb_params():
-    """Hyperparameters for the XGBoost ensemble members."""
-    return {
+def xgb_params(overrides: dict | None = None) -> dict:
+    """Hyperparameters for the XGBoost ensemble members.
+
+    ``overrides`` merges on top of the defaults (e.g. a caller-supplied
+    ``max_depth`` or a new key such as ``subsample``), so experiment configs
+    can actually reach the trainer instead of only being recorded.
+    """
+    params = {
         "max_depth": 4,
         "objective": "binary:logistic",
         "eta": 0.125,
@@ -173,12 +208,30 @@ def xgb_params():
         "eval_metric": "error",
         "colsample_bytree": 0.8,
     }
+    if overrides:
+        params.update(overrides)
+    return params
 
 
-def train_xgb_ensemble(train_x, train_y, k: int = 4, num_round: int = 25, model_dir: str = "."):
-    """Train a k-fold XGBoost ensemble and persist each fold's model to disk."""
+def train_xgb_ensemble(
+    train_x,
+    train_y,
+    k: int = 4,
+    num_round: int = 25,
+    model_dir: str = ".",
+    early_stopping_rounds: int = 20,
+    hyperparameter_overrides: dict | None = None,
+):
+    """Train a k-fold XGBoost ensemble and persist each fold's model to disk.
+
+    ``hyperparameter_overrides`` is merged into :func:`xgb_params` so callers
+    (e.g. the eval harness) can drive real hyperparameter experiments;
+    ``early_stopping_rounds`` is likewise a real parameter rather than a
+    hardcoded constant.
+    """
     import xgboost as xgb
 
+    params = xgb_params(hyperparameter_overrides)
     num_samples = len(train_x) // k
     ensemble = []
     for i in range(k):
@@ -193,7 +246,9 @@ def train_xgb_ensemble(train_x, train_y, k: int = 4, num_round: int = 25, model_
         dtrain = xgb.DMatrix(partial_train_data, partial_train_targets)
         dval = xgb.DMatrix(val_data, val_targets)
         eval_list = [(dval, "eval"), (dtrain, "train")]
-        bst = xgb.train(xgb_params(), dtrain, num_round, eval_list, early_stopping_rounds=20)
+        bst = xgb.train(
+            params, dtrain, num_round, eval_list, early_stopping_rounds=early_stopping_rounds
+        )
         model_path = f"{model_dir}/xgb{i}.pickle.dat"
         pickle.dump(bst, open(model_path, "wb"))
         loaded_model = pickle.load(open(model_path, "rb"))

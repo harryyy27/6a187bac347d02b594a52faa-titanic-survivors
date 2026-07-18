@@ -162,11 +162,35 @@ def test_encode_categoricals_one_hot_encodes_pclass_and_sex():
     assert {"Sex_male", "Sex_female"}.issubset(train_out.columns)
 
 
+def test_add_fare_per_person_normalizes_by_family_size():
+    df = pd.DataFrame({"Fare": [40.0, 30.0, 10.0], "Family_Size": [1, 0, 4]})
+    df = titanic.add_fare_per_person(df)
+
+    assert list(df["Fare_Per_Person"]) == pytest.approx([20.0, 30.0, 2.0])
+
+
+def test_add_age_class_interaction_multiplies_age_and_pclass():
+    df = pd.DataFrame({"Age": [20.0, 30.0], "Pclass": [3, 1]})
+    df = titanic.add_age_class_interaction(df)
+
+    assert list(df["Age_Class"]) == pytest.approx([60.0, 30.0])
+
+
 def test_xgb_params_returns_expected_hyperparameter_keys():
     params = titanic.xgb_params()
 
     assert params["objective"] == "binary:logistic"
     assert params["max_depth"] == 4
+
+
+def test_xgb_params_applies_overrides_without_dropping_defaults():
+    params = titanic.xgb_params({"max_depth": 6, "subsample": 0.85})
+
+    assert params["max_depth"] == 6
+    assert params["subsample"] == 0.85
+    # Unrelated defaults are preserved.
+    assert params["objective"] == "binary:logistic"
+    assert params["gamma"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -187,9 +211,42 @@ def test_train_xgb_ensemble_trains_k_folds_without_real_xgboost(fake_xgboost, tm
     for call in fake_xgboost._calls["train"]:
         assert call["num_round"] == 3
         assert call["params"]["objective"] == "binary:logistic"
+        # Default (no overrides) -> hardcoded defaults, default early stopping.
+        assert call["params"]["max_depth"] == 4
+        assert call["early_stopping_rounds"] == 20
     # Each fold's model artifact must be handed off to disk and reloaded.
     for i in range(4):
         assert (tmp_path / f"xgb{i}.pickle.dat").exists()
+
+
+def test_train_xgb_ensemble_forwards_hyperparameter_overrides_and_early_stopping(
+    fake_xgboost, tmp_path
+):
+    """Regression test: hyperparameter_overrides and early_stopping_rounds
+    must actually reach the xgb.train() call, not just be accepted and
+    ignored -- this was the root cause of several eval experiments (varying
+    max_depth/gamma) reporting no metric change."""
+    train_x = np.arange(40).reshape(20, 2).astype(float)
+    train_y = np.array([0, 1] * 10)
+
+    titanic.train_xgb_ensemble(
+        train_x,
+        train_y,
+        k=2,
+        num_round=5,
+        model_dir=str(tmp_path),
+        early_stopping_rounds=7,
+        hyperparameter_overrides={"max_depth": 6, "gamma": 2, "subsample": 0.85},
+    )
+
+    assert len(fake_xgboost._calls["train"]) == 2
+    for call in fake_xgboost._calls["train"]:
+        assert call["early_stopping_rounds"] == 7
+        assert call["params"]["max_depth"] == 6
+        assert call["params"]["gamma"] == 2
+        assert call["params"]["subsample"] == 0.85
+        # Untouched defaults still present alongside the overrides.
+        assert call["params"]["objective"] == "binary:logistic"
 
 
 def test_predict_with_ensemble_majority_votes_across_models(fake_xgboost):
@@ -215,6 +272,24 @@ def test_build_keras_model_configures_layers_without_real_keras(fake_keras):
     assert model.added_layers[0].kwargs["units"] == 32
     assert model.added_layers[1].kwargs["units"] == 2
     assert model.compile_kwargs["optimizer"] == "adam"
+
+
+def test_prepare_features_includes_new_engineered_columns():
+    """Boundary check: add_fare_per_person / add_age_class_interaction must
+    be wired into prepare_features and produce numeric, fully-populated
+    columns on both sides of the split (consumed downstream as raw numpy
+    input to train_xgb_ensemble / predict_with_ensemble, so NaNs or missing
+    columns here would silently corrupt the feature matrix)."""
+    train, test = _sample_train_df(), _sample_test_df()
+    train_out, test_out = titanic.prepare_features(train, test)
+
+    for col in ("Fare_Per_Person", "Age_Class"):
+        assert col in train_out.columns
+        assert col in test_out.columns
+        assert pd.api.types.is_numeric_dtype(train_out[col])
+        assert pd.api.types.is_numeric_dtype(test_out[col])
+        assert train_out[col].isnull().sum() == 0
+        assert test_out[col].isnull().sum() == 0
 
 
 # ---------------------------------------------------------------------------
