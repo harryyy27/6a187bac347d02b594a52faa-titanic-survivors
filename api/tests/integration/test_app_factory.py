@@ -102,6 +102,13 @@ def test_cors_preflight_allows_configured_origin(client) -> None:  # noqa: ANN00
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    # Workflow test notes require "correct methods" to be asserted, not just
+    # the allowed origin: the configured method allowlist (GET/POST/OPTIONS)
+    # must come back so the browser knows which verbs it may use.
+    allowed_methods = {
+        method.strip() for method in response.headers["access-control-allow-methods"].split(",")
+    }
+    assert {"GET", "POST", "OPTIONS"}.issubset(allowed_methods)
 
 
 @testWrapperTimeout
@@ -115,6 +122,91 @@ def test_cors_preflight_rejects_unconfigured_origin(client) -> None:  # noqa: AN
     )
 
     assert response.status_code == 400
+    # Access-Control-Allow-Origin is the header a browser actually keys its
+    # block/allow decision on for a disallowed origin -- Starlette's
+    # CORSMiddleware still returns Access-Control-Allow-Methods/Max-Age on a
+    # rejected preflight (they're origin-independent), so only assert on the
+    # header that determines whether the browser blocks the real request.
+    assert "access-control-allow-origin" not in response.headers
+
+
+@testWrapperTimeout
+def test_cors_preflight_echoes_requested_headers_when_wildcard(client) -> None:  # noqa: ANN001
+    """A real browser POST of a JSON body (e.g. the SPA calling /api/predict)
+    sends `Content-Type: application/json`, which is a non-simple header and
+    forces the browser to include it in the preflight's
+    Access-Control-Request-Headers. With CORS_ALLOW_HEADERS left at its
+    wildcard default, the middleware must echo the requested header back so
+    the browser proceeds with the actual request instead of blocking it.
+    """
+    response = client.options(
+        "/api/v1/health",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "content-type" in response.headers["access-control-allow-headers"].lower()
+
+
+@testWrapperTimeout
+def test_cors_preflight_allows_post_predict_json_request(client) -> None:  # noqa: ANN001
+    """End-to-end preflight for the concrete cross-origin call the web SPA
+    makes: POST /api/predict with a JSON body. This is the workflow's step
+    1/2 scenario (browser auto-triggers OPTIONS before the real request)
+    exercised against the actual prediction route the SPA hits, not just
+    /api/v1/health.
+    """
+    response = client.options(
+        "/api/predict",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+    allowed_methods = {
+        method.strip() for method in response.headers["access-control-allow-methods"].split(",")
+    }
+    assert "POST" in allowed_methods
+    assert "content-type" in response.headers["access-control-allow-headers"].lower()
+
+
+@testWrapperTimeout
+def test_cors_actual_get_request_echoes_allow_origin_header(client) -> None:  # noqa: ANN001
+    """Workflow step 4: once the preflight allows the origin, the browser
+    proceeds with the actual (non-OPTIONS) request, which must also carry
+    Access-Control-Allow-Origin so the browser hands the response back to
+    the page's JS instead of blocking it.
+    """
+    response = client.get(
+        "/api/v1/health",
+        headers={"Origin": "http://localhost:5173"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+@testWrapperTimeout
+def test_cors_actual_request_from_disallowed_origin_has_no_allow_header(client) -> None:  # noqa: ANN001
+    """A disallowed Origin on the actual request still gets a normal server
+    response (CORS is a browser-side block, not a server-side auth check),
+    but without Access-Control-Allow-Origin the browser must refuse to
+    expose the response body to the page's JS.
+    """
+    response = client.get(
+        "/api/v1/health",
+        headers={"Origin": "http://evil.example.com"},
+    )
+
+    assert response.status_code == 200
     assert "access-control-allow-origin" not in response.headers
 
 

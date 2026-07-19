@@ -50,15 +50,13 @@ React with Vite offers a fast, lightweight SPA suitable for a single-page form-a
 
 ## What you built
 Feature: API Service Foundation (FastAPI + CORS + Config)
-Workflow: Health Check (Liveness/Readiness) — A user or monitoring system retrieves health status to verify service availability and basic readiness.
+Workflow: CORS Preflight (OPTIONS) for Browser Calls — Browser issues a CORS preflight to check permissions before cross-origin requests from the SPA.
 
 Steps implemented:
-  1. 1) User navigates in a browser or monitoring tool to GET http://<host>:<port>/api/v1/health; feature is visible via health route [Container: user browser/monitor] Deps: []
-  2. 2) Request hits uvicorn, passed to FastAPI router /api/v1/health; request start time recorded (Server-Timing middleware if enabled) [Container: backend/api process] Deps: [1]
-  3. 3) Handler reads app.state (process_start, settings, readiness, version) and builds response payload with status, service, env, time (UTC ISO8601), version, uptime_ms, dependencies {'model_artifacts':'unknown'} [Container: backend/api process] Deps: [2]
-  4. 4) Response returned as ORJSONResponse with 200 and Cache-Control: no-store; Server-Timing header included if enabled [Container: backend/api process] Deps: [3]
-  5. 5) Per-request logger writes structured access log with method, path, status_code, duration_ms, client_ip, user_agent [Container: backend/api process] Deps: [4]
-  6. 6) Browser/monitor displays JSON payload and confirms 200 status [Container: user browser/monitor] Deps: [4]
+  1. 1) User opens SPA at http://localhost:5173 and initiates a call to the API (e.g., fetch('/api/v1/health')); browser auto-triggers OPTIONS preflight; feature is reachable from SPA UI [Container: web browser/SPA] Deps: []
+  2. 2) Browser sends OPTIONS request with Origin, Access-Control-Request-Method, and Access-Control-Request-Headers to API route /api/v1/health [Container: web browser/SPA] Deps: [1]
+  3. 3) CORS middleware evaluates origin against settings.CORS_ALLOW_ORIGINS and allowed methods/headers; returns 200/204 with appropriate Access-Control-Allow-* headers if allowed [Container: backend/api process] Deps: [2]
+  4. 4) If allowed, browser proceeds with actual GET request; if denied, browser blocks request and surfaces CORS error in console [Container: web browser/SPA] Deps: [3]
 
 ## Your task
 
