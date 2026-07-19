@@ -122,8 +122,12 @@ def test_cors_preflight_rejects_unconfigured_origin(client) -> None:  # noqa: AN
     )
 
     assert response.status_code == 400
+    # Access-Control-Allow-Origin is the header a browser actually keys its
+    # block/allow decision on for a disallowed origin -- Starlette's
+    # CORSMiddleware still returns Access-Control-Allow-Methods/Max-Age on a
+    # rejected preflight (they're origin-independent), so only assert on the
+    # header that determines whether the browser blocks the real request.
     assert "access-control-allow-origin" not in response.headers
-    assert "access-control-allow-methods" not in response.headers
 
 
 @testWrapperTimeout
