@@ -40,6 +40,10 @@ async def _not_found(request):  # type: ignore[no-untyped-def]  # noqa: ARG001, 
     return PlainTextResponse("nope", status_code=404)
 
 
+async def _redirect(request):  # type: ignore[no-untyped-def]  # noqa: ARG001, ANN001
+    return PlainTextResponse("moved", status_code=307, headers={"Location": "/ok"})
+
+
 def _make_client(*, include_server_timing: bool = True) -> TestClient:
     settings = AppSettings(include_server_timing=include_server_timing)
     app = Starlette(
@@ -47,6 +51,7 @@ def _make_client(*, include_server_timing: bool = True) -> TestClient:
             Route("/ok", _ok),
             Route("/boom", _boom),
             Route("/notfound", _not_found),
+            Route("/redirect", _redirect),
         ]
     )
     app.add_middleware(RequestContextMiddleware, settings=settings)
@@ -120,6 +125,34 @@ def test_access_log_level_is_info_for_2xx(caplog: pytest.LogCaptureFixture) -> N
 
     record = next(r for r in caplog.records if r.name == "app.access")
     assert record.levelname == "INFO"
+
+
+@testWrapperTimeout
+def test_access_log_level_is_info_for_3xx(caplog: pytest.LogCaptureFixture) -> None:
+    """3xx responses (e.g. redirects) must log at INFO, same as 2xx --
+    workflow step 4 requires "INFO for 2xx/3xx", so this exercises the
+    `else` branch of the status-code -> log-level mapping that the 2xx and
+    4xx/5xx tests around it don't reach.
+    """
+    client = _make_client()
+
+    with caplog.at_level(logging.INFO, logger="app.access"):
+        response = client.get("/redirect", headers={"User-Agent": "pytest-agent/1.0"}, follow_redirects=False)
+
+    assert response.status_code == 307
+
+    records = [r for r in caplog.records if r.name == "app.access" and r.message == "request.completed"]
+    assert len(records) == 1
+    record = records[0]
+
+    assert record.levelname == "INFO"
+    assert record.method == "GET"
+    assert record.path == "/redirect"
+    assert record.status_code == 307
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0
+    assert record.request_id
+    assert record.user_agent == "pytest-agent/1.0"
 
 
 @testWrapperTimeout
