@@ -50,13 +50,14 @@ React with Vite offers a fast, lightweight SPA suitable for a single-page form-a
 
 ## What you built
 Feature: API Service Foundation (FastAPI + CORS + Config)
-Workflow: CORS Preflight (OPTIONS) for Browser Calls — Browser issues a CORS preflight to check permissions before cross-origin requests from the SPA.
+Workflow: Structured Error Handling (HTTPException/404) — Unknown route access demonstrates standardized error schema and logging.
 
 Steps implemented:
-  1. 1) User opens SPA at http://localhost:5173 and initiates a call to the API (e.g., fetch('/api/v1/health')); browser auto-triggers OPTIONS preflight; feature is reachable from SPA UI [Container: web browser/SPA] Deps: []
-  2. 2) Browser sends OPTIONS request with Origin, Access-Control-Request-Method, and Access-Control-Request-Headers to API route /api/v1/health [Container: web browser/SPA] Deps: [1]
-  3. 3) CORS middleware evaluates origin against settings.CORS_ALLOW_ORIGINS and allowed methods/headers; returns 200/204 with appropriate Access-Control-Allow-* headers if allowed [Container: backend/api process] Deps: [2]
-  4. 4) If allowed, browser proceeds with actual GET request; if denied, browser blocks request and surfaces CORS error in console [Container: web browser/SPA] Deps: [3]
+  1. 1) User enters an unknown URL in browser, e.g., GET /api/v1/unknown; feature visible via navigation to invalid path [Container: user browser] Deps: []
+  2. 2) Request is routed; FastAPI resolves no matching route and raises HTTPException(status_code=404) [Container: backend/api process] Deps: [1]
+  3. 3) Registered HTTPException handler formats ErrorResponse {error: {code: 'http_404', message: 'Not Found'}, details: null, request_id?:<id>} and returns ORJSONResponse with 404 [Container: backend/api process] Deps: [2]
+  4. 4) Per-request logging captures 404 as WARN with route details and duration_ms [Container: backend/api process] Deps: [3]
+  5. 5) Browser displays JSON error body and 404 status [Container: user browser] Deps: [3]
 
 ## Your task
 

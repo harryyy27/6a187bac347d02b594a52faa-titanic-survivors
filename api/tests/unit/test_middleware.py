@@ -36,9 +36,19 @@ async def _boom(request):  # type: ignore[no-untyped-def]  # noqa: ARG001, ANN00
     raise RuntimeError("kaboom")
 
 
+async def _not_found(request):  # type: ignore[no-untyped-def]  # noqa: ARG001, ANN001
+    return PlainTextResponse("nope", status_code=404)
+
+
 def _make_client(*, include_server_timing: bool = True) -> TestClient:
     settings = AppSettings(include_server_timing=include_server_timing)
-    app = Starlette(routes=[Route("/ok", _ok), Route("/boom", _boom)])
+    app = Starlette(
+        routes=[
+            Route("/ok", _ok),
+            Route("/boom", _boom),
+            Route("/notfound", _not_found),
+        ]
+    )
     app.add_middleware(RequestContextMiddleware, settings=settings)
     return TestClient(app, raise_server_exceptions=False)
 
@@ -110,6 +120,33 @@ def test_access_log_level_is_info_for_2xx(caplog: pytest.LogCaptureFixture) -> N
 
     record = next(r for r in caplog.records if r.name == "app.access")
     assert record.levelname == "INFO"
+
+
+@testWrapperTimeout
+def test_access_log_level_is_warning_for_4xx(caplog: pytest.LogCaptureFixture) -> None:
+    """404s (and other 4xx) must be logged at WARN with route details and
+    duration_ms -- workflow step "Per-request logging captures 404 as WARN
+    with route details and duration_ms".
+    """
+    client = _make_client()
+
+    with caplog.at_level(logging.INFO, logger="app.access"):
+        response = client.get("/notfound", headers={"User-Agent": "pytest-agent/1.0"})
+
+    assert response.status_code == 404
+
+    records = [r for r in caplog.records if r.name == "app.access" and r.message == "request.completed"]
+    assert len(records) == 1
+    record = records[0]
+
+    assert record.levelname == "WARNING"
+    assert record.method == "GET"
+    assert record.path == "/notfound"
+    assert record.status_code == 404
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0
+    assert record.request_id
+    assert record.user_agent == "pytest-agent/1.0"
 
 
 @testWrapperTimeout
