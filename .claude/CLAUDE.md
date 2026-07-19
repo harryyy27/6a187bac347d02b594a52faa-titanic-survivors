@@ -50,14 +50,14 @@ React with Vite offers a fast, lightweight SPA suitable for a single-page form-a
 
 ## What you built
 Feature: API Service Foundation (FastAPI + CORS + Config)
-Workflow: Structured Error Handling (HTTPException/404) — Unknown route access demonstrates standardized error schema and logging.
+Workflow: Per-Request Logging and Server-Timing — Each handled request is measured and logged with structured fields; optional Server-Timing header is emitted.
 
 Steps implemented:
-  1. 1) User enters an unknown URL in browser, e.g., GET /api/v1/unknown; feature visible via navigation to invalid path [Container: user browser] Deps: []
-  2. 2) Request is routed; FastAPI resolves no matching route and raises HTTPException(status_code=404) [Container: backend/api process] Deps: [1]
-  3. 3) Registered HTTPException handler formats ErrorResponse {error: {code: 'http_404', message: 'Not Found'}, details: null, request_id?:<id>} and returns ORJSONResponse with 404 [Container: backend/api process] Deps: [2]
-  4. 4) Per-request logging captures 404 as WARN with route details and duration_ms [Container: backend/api process] Deps: [3]
-  5. 5) Browser displays JSON error body and 404 status [Container: user browser] Deps: [3]
+  1. 1) Operator opens browser and hits GET /api/v1/health to generate a request for observing logs; feature visible via health page access [Container: operator browser] Deps: []
+  2. 2) Logging/timing middleware records start time and collects request context (method, path, client_ip, user_agent, request_id?) [Container: backend/api process] Deps: [1]
+  3. 3) Request processed by route; response generated (200 or error) [Container: backend/api process] Deps: [2]
+  4. 4) Middleware computes duration_ms, sets Server-Timing header if enabled, emits structured log at INFO for 2xx/3xx, WARN for 4xx, ERROR for 5xx with fields: timestamp, level, app, env, version, method, path, status_code, duration_ms, client_ip, user_agent, request_id [Container: backend/api process] Deps: [3]
+  5. 5) Operator views JSON logs in terminal or log sink and confirms presence of expected fields [Container: developer shell] Deps: [4]
 
 ## Your task
 
