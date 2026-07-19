@@ -50,19 +50,15 @@ React with Vite offers a fast, lightweight SPA suitable for a single-page form-a
 
 ## What you built
 Feature: API Service Foundation (FastAPI + CORS + Config)
-Workflow: Run API Locally (App Factory Boot + Lifespan) — Developer starts the FastAPI service using the app factory; settings load, logging initializes, middleware/routers/handlers attach, and readiness flips to true.
+Workflow: Health Check (Liveness/Readiness) — A user or monitoring system retrieves health status to verify service availability and basic readiness.
 
 Steps implemented:
-  1. 1) Developer opens terminal and runs `uvicorn api.main:create_app --factory --host 0.0.0.0 --port 8000 --reload` to start the API; feature becomes reachable at http://localhost:8000 [Container: developer shell] Deps: []
-  2. 2) python-dotenv loads .env early; environment variables are read to build effective config (env vars > .env > defaults) [Container: backend/api process] Deps: [1]
-  3. 3) AppSettings(BaseSettings) validates and materializes settings; invalid values raise validation errors; invalid CORS origins are warned and skipped [Container: backend/api process] Deps: [2]
-  4. 4) logging_config.init_logging(settings) configures structured JSON logging and harmonizes uvicorn loggers [Container: backend/api process] Deps: [3]
-  5. 5) FastAPI app is created via create_app(); ORJSONResponse set as default; title/version/docos configured based on ENV [Container: backend/api process] Deps: [4]
-  6. 6) Middleware installed in order: (a) CORS with allow_* from settings, (b) optional request ID placeholder, (c) optional Server-Timing if enabled [Container: backend/api process] Deps: [5]
-  7. 7) Routers included under prefix settings.API_V1_PREFIX: health router mapped to GET /api/v1/health [Container: backend/api process] Deps: [6]
-  8. 8) Exception handlers registered: HTTPException, RequestValidationError, and generic Exception mapped to structured ErrorResponse with ORJSONResponse [Container: backend/api process] Deps: [7]
-  9. 9) Startup event runs: app.state.process_start captured, settings and environment summary logged, readiness flag set true after successful init [Container: backend/api process] Deps: [8]
-  10. 10) Uvicorn server binds HOST:PORT and begins accepting connections [Container: backend/api process] Deps: [9]
+  1. 1) User navigates in a browser or monitoring tool to GET http://<host>:<port>/api/v1/health; feature is visible via health route [Container: user browser/monitor] Deps: []
+  2. 2) Request hits uvicorn, passed to FastAPI router /api/v1/health; request start time recorded (Server-Timing middleware if enabled) [Container: backend/api process] Deps: [1]
+  3. 3) Handler reads app.state (process_start, settings, readiness, version) and builds response payload with status, service, env, time (UTC ISO8601), version, uptime_ms, dependencies {'model_artifacts':'unknown'} [Container: backend/api process] Deps: [2]
+  4. 4) Response returned as ORJSONResponse with 200 and Cache-Control: no-store; Server-Timing header included if enabled [Container: backend/api process] Deps: [3]
+  5. 5) Per-request logger writes structured access log with method, path, status_code, duration_ms, client_ip, user_agent [Container: backend/api process] Deps: [4]
+  6. 6) Browser/monitor displays JSON payload and confirms 200 status [Container: user browser/monitor] Deps: [4]
 
 ## Your task
 
