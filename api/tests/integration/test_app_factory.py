@@ -5,6 +5,7 @@ FastAPI's TestClient against a real (in-process) ASGI app.
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -46,6 +47,7 @@ def test_health_endpoint_returns_expected_schema(client) -> None:  # noqa: ANN00
 
     assert response.status_code == 200
     assert response.headers["cache-control"] == "no-store"
+    assert response.headers["content-type"] == "application/json"
 
     body = response.json()
     assert body["status"] == "ok"
@@ -54,7 +56,16 @@ def test_health_endpoint_returns_expected_schema(client) -> None:  # noqa: ANN00
     assert body["time"].endswith("Z")
     assert isinstance(body["uptime_ms"], (int, float))
     assert body["uptime_ms"] >= 0
-    assert body["dependencies"]["ready"] is True
+    assert body["dependencies"] == {"ready": True, "model_artifacts": "unknown"}
+
+
+@testWrapperTimeout
+def test_health_uptime_ms_increases_across_successive_calls(client) -> None:  # noqa: ANN001
+    first = client.get("/api/v1/health").json()
+    time.sleep(0.05)
+    second = client.get("/api/v1/health").json()
+
+    assert second["uptime_ms"] > first["uptime_ms"]
 
 
 @testWrapperTimeout
