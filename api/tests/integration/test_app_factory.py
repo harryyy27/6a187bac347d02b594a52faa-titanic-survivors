@@ -4,6 +4,7 @@ FastAPI's TestClient against a real (in-process) ASGI app.
 """
 from __future__ import annotations
 
+import logging
 import sys
 import time
 from pathlib import Path
@@ -218,6 +219,35 @@ def test_unknown_route_returns_structured_404(client) -> None:  # noqa: ANN001
     body = response.json()
     assert body["error"]["code"] == "http_404"
     assert "request_id" in body
+
+
+@testWrapperTimeout
+def test_unknown_route_logs_warning_with_route_details_and_duration(
+    client, caplog: pytest.LogCaptureFixture  # noqa: ANN001
+) -> None:
+    """End-to-end version of the "Per-request logging captures 404 as WARN
+    with route details and duration_ms" workflow step: hits an unknown route
+    on the real app (full middleware + exception-handler stack) and asserts
+    the resulting access-log record is WARNING with method/path/status_code
+    and a numeric duration_ms.
+    """
+    with caplog.at_level(logging.INFO, logger="app.access"):
+        response = client.get("/this/route/does/not/exist")
+
+    assert response.status_code == 404
+
+    records = [
+        r for r in caplog.records if r.name == "app.access" and r.message == "request.completed"
+    ]
+    assert len(records) == 1
+    record = records[0]
+
+    assert record.levelname == "WARNING"
+    assert record.method == "GET"
+    assert record.path == "/this/route/does/not/exist"
+    assert record.status_code == 404
+    assert isinstance(record.duration_ms, float)
+    assert record.duration_ms >= 0
 
 
 @testWrapperTimeout
