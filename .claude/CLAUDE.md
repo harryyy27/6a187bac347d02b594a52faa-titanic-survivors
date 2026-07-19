@@ -404,65 +404,7 @@ Future Integration Points (outside this feature but enabled by it)
   7. Automated Tests: Health and CORS — CI or developer runs pytest; tests validate health endpoint and CORS behavior using TestClient.
 
 ## Feature Progress Context
-The following has already been built or decided in this feature.
-Treat this as the authoritative handoff from earlier workflow iterations; reuse these contracts and do not duplicate them.
-
-**Latest feature branch state:**
-  - Branch: `feature/6a5930d00af5ba40433b276c/6a5bed2cf575302e212edd17`
-  - Commit: `113ad2996dc99e171059cccaf83e57524f871a57`
-**Completed workflows:**
-  - Workflow 0 (Run API Locally (App Factory Boot + Lifespan)): Implemented a FastAPI app-factory with lifespan startup, structured logging, validated settings with dotenv, CORS and optional timing/request-id middleware, centralized exception handling, and a versioned health endpoint, along with documentation and tests to run the API locally via uvicorn.
-
-**Files already created:**
-  - .env.example
-  - README-test.md
-  - README.md
-  - app/__init__.py
-  - app/api/health.py
-  - app/core/config.py
-  - app/core/errors.py
-  - app/core/logging_config.py
-  - app/deps.py
-  - app/main.py
-  - app/middleware.py
-  - app/types.py
-
-**Files already modified:**
-  - .claude/CLAUDE.md
-
-**APIs already defined:**
-  - GET /api/v1/health
-
-**Functions / classes already defined:**
-  - AppSettings(BaseSettings)
-  - ServiceHealthResponse(BaseModel)
-  - create_app() -> FastAPI
-  - get_health() -> ServiceHealthResponse
-  - handle_http_exception(exc: HTTPException, request) -> ORJSONResponse
-  - handle_request_validation_error(exc: RequestValidationError, request) -> ORJSONResponse
-  - handle_unhandled_exception(exc: Exception, request) -> ORJSONResponse
-  - init_logging(settings: AppSettings) -> None
-
-**Tests already run:**
-  - integration tests: passed — Not paused. Now let's follow the CLAUDE.md instructions: identify changed files/components and re-run `run_test` to confirm the final state.
-Confirmed: 37 passed, 0 failed, on the current remote HEAD (`113ad29`). Only `api` was changed for this workflow; `web` was not touched.
-
-INTEGRATION TESTS: ALL PASSED
-
-**Read these files first:**
-  - .claude/CLAUDE.md
-  - .env.example
-  - README-test.md
-  - README.md
-  - app/__init__.py
-  - app/api/health.py
-  - app/core/config.py
-  - app/core/errors.py
-  - app/core/logging_config.py
-  - app/deps.py
-  - app/main.py
-  - app/middleware.py
-  - app/types.py
+No workflows in this feature have completed yet — you may be first.
 
 ---
 
