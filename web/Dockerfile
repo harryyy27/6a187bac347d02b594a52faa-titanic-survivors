@@ -7,8 +7,12 @@ WORKDIR /app
 # cached across source-only changes.
 COPY package.json package-lock.json* ./
 
-# Non-interactive, frozen install.
-RUN npm ci --no-audit --no-fund \
+# Install dependencies. No package-lock.json is committed to the repo
+# (all deps in package.json are pinned to "*"), so `npm ci` -- which
+# requires an existing, in-sync lockfile -- fails the image build.
+# `npm install` resolves and installs from package.json directly,
+# generating a lockfile inside the image as a byproduct.
+RUN npm install --no-audit --no-fund \
     && which node \
     && which npm
 
