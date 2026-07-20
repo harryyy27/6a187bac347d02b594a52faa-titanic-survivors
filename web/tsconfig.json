@@ -19,7 +19,7 @@
       "@/*": ["*"]
     },
     "types": ["node", "vitest"],
-    "ignoreDeprecations": "5.0",
+    "ignoreDeprecations": "6.0",
     "noEmit": true
   },
   "include": ["src", "tests", "vitest.config.ts"]
