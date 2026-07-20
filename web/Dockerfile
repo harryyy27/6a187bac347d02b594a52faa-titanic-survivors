@@ -17,6 +17,11 @@ COPY . .
 
 ENV NODE_ENV=production
 
+# Produce the static production build that `vite preview` serves below.
+# Without this, the container starts and immediately exits because the
+# `dist/` directory does not exist yet.
+RUN npm run build
+
 EXPOSE 4173
 
 # Placeholder command: the framework's production preview server. Not
