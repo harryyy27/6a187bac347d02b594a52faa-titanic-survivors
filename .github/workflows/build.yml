@@ -46,7 +46,7 @@ jobs:
             dir=${dir%/}
             ENV_NAME="${{ github.event.inputs.env_name }}"
             DOCKERFILE=""
-            if [ "$ENV_NAME" = "prod" ]; then
+            if [ "$ENV_NAME" = "production" ]; then
               if [ -f "$dir/Dockerfile.prod" ]; then
                 DOCKERFILE="$dir/Dockerfile.prod"
               elif [ -f "$dir/Dockerfile" ]; then
