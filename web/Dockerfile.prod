@@ -7,8 +7,15 @@ WORKDIR /app
 # cached across source-only changes.
 COPY package.json package-lock.json* ./
 
-# Non-interactive, frozen install.
-RUN npm ci --no-audit --no-fund \
+# Non-interactive install. `npm ci` is intentionally NOT used here: it
+# requires a committed package-lock.json, and this project does not
+# currently ship one (see web/package.json, which pins no dependency
+# versions and has no lockfile in the repo). `npm ci` fails hard with
+# "can only install with an existing package-lock.json" when the lockfile
+# is absent, which is what broke the production image build. `npm install`
+# works without a lockfile (and will generate one in-image) and mirrors
+# what Dockerfile.dev / Dockerfile.test already do for this project.
+RUN npm install --no-audit --no-fund \
     && which node \
     && which npm
 
