@@ -24,8 +24,8 @@
     "axios": "*",
     "zustand": "*",
     "react-hook-form": "*",
-    "zod": "*",
-    "@hookform/resolvers": "*",
+    "zod": "^3.23.8",
+    "@hookform/resolvers": "^3.9.0",
     "lottie-web": "*",
     "clsx": "*"
   },
