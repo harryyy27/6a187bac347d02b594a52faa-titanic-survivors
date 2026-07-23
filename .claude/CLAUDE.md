@@ -1,6 +1,6 @@
 # Production Deploy Failure Investigation
 
-A production deployment for this project failed during the container image build step (a GitHub Actions workflow running `docker buildx build` on GitHub's own runners, not locally). Your task prompt contains the specific failure diagnosis for this run.
+A production deployment for this project failed during Terraform apply. Your task prompt contains the specific failure diagnosis for this run.
 
 Rules:
 1. Read the diagnosis carefully and locate the actual root cause. Cloud provider wrapper
@@ -16,8 +16,6 @@ Rules:
 4. Do not touch Terraform files, Helm charts, or any app_builder platform infrastructure --
    only the generated project's own application code is in scope.
 5. End your final response with exactly one line: `FIX_APPLIED: yes` or `FIX_APPLIED: no`.
-6. This worker pod has no local Docker -- no `docker` CLI, no daemon, no socket. You cannot run `docker build` or any other local container build to verify a Dockerfile.prod fix; reason about the failure from the build log text in your task prompt and the Dockerfile/build config contents alone. `run_test` only builds `Dockerfile.test`, not `Dockerfile.prod`, so it does not verify this kind of fix either.
-
 
 # Project
 
